@@ -61,6 +61,13 @@ export type AppSettings = {
   markerDetection: MarkerDetectionSettings
 }
 
+export type RenderPageOptions = {
+  /** Omit user background; content is composited on transparency (use PNG). */
+  skipBackground?: boolean
+  /** Checkerboard behind content when skipping background (UI previews only). */
+  showPlaceholderBackground?: boolean
+}
+
 export type Page = {
   id: string
   name: string
@@ -70,6 +77,8 @@ export type Page = {
   thumbnailDataUrl: string
   createdAt: number
   isCollage?: boolean
+  collagePanelPageIds?: string[]
+  collageRenderOptions?: CollageRenderOptions
 }
 
 export type CollageLayout = 'horizontal-2'
@@ -79,6 +88,8 @@ export type CollageRenderOptions = {
   showTitles?: boolean
   showCenterDivider?: boolean
   imageScales?: number[]
+  skipBackground?: boolean
+  showPlaceholderBackground?: boolean
 }
 
 export type EditorState = {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
-import { renderCollageToDataUrl } from '../utils/canvasRenderer'
+import { renderCollageFromPages } from '../utils/canvasRenderer'
 import { MIN_COLLAGE_PANELS } from '../config/collage'
 import type { CollageRenderOptions } from '../types'
 
@@ -67,8 +67,6 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
           return
         }
 
-        const thumbnails = selectedPages.map((page) => page.thumbnailDataUrl)
-
         const collageOptions: CollageRenderOptions = {
           titles: collageTitles.slice(0, selectedPages.length),
           showTitles: collageShowTitles,
@@ -76,8 +74,8 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
           imageScales: collageImageScales.slice(0, selectedPages.length),
         }
 
-        const collageDataUrl = await renderCollageToDataUrl(
-          thumbnails,
+        const collageDataUrl = await renderCollageFromPages(
+          selectedPages,
           settings,
           collageOptions,
         )

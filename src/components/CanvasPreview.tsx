@@ -74,7 +74,10 @@ export function CanvasPreview({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !sourceImageDataUrl) return
-    void renderPageToCanvas(canvas, settings, sourceImageDataUrl, overlays)
+    void renderPageToCanvas(canvas, settings, sourceImageDataUrl, overlays, {
+      skipBackground: true,
+      showPlaceholderBackground: true,
+    })
   }, [settings, sourceImageDataUrl, overlays])
 
   useEffect(() => {

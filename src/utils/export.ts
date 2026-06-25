@@ -1,7 +1,11 @@
 import { saveAs } from 'file-saver'
 import JSZip from 'jszip'
-import type { Page } from '../types'
-import { renderPageToDataUrl } from './canvasRenderer'
+import type { AppSettings, Page } from '../types'
+import {
+  mergeBackgroundSettings,
+  renderCollageFromPages,
+  renderPageToDataUrl,
+} from './canvasRenderer'
 
 function getReportsZipFilename(date = new Date()): string {
   const year = date.getFullYear()
@@ -10,31 +14,59 @@ function getReportsZipFilename(date = new Date()): string {
   return `reports-${year}-${month}-${day}.zip`
 }
 
-export async function downloadPagePng(page: Page, filename?: string) {
-  const dataUrl = await renderPageToDataUrl(
-    page.settings,
+export async function renderPageForExport(page: Page, globalSettings: AppSettings, allPages: Page[]) {
+  if (page.isCollage && page.collagePanelPageIds?.length) {
+    const panelPages = page.collagePanelPageIds
+      .map((id) => allPages.find((item) => item.id === id && !item.isCollage))
+      .filter((item): item is Page => Boolean(item))
+
+    if (panelPages.length >= page.collagePanelPageIds.length) {
+      return renderCollageFromPages(
+        panelPages,
+        globalSettings,
+        page.collageRenderOptions ?? { titles: [] },
+      )
+    }
+  }
+
+  if (page.isCollage) {
+    return page.thumbnailDataUrl
+  }
+
+  return renderPageToDataUrl(
+    mergeBackgroundSettings(page.settings, globalSettings),
     page.sourceImageDataUrl,
     page.overlays,
   )
+}
+
+export async function downloadPagePng(
+  page: Page,
+  globalSettings: AppSettings,
+  allPages: Page[] = [],
+  filename?: string,
+) {
+  const dataUrl = await renderPageForExport(page, globalSettings, allPages)
   const response = await fetch(dataUrl)
   const blob = await response.blob()
   saveAs(blob, filename ?? `${page.name}.png`)
 }
 
-export async function downloadAllPagesAsPngs(pages: Page[]) {
+export async function downloadAllPagesAsPngs(pages: Page[], globalSettings: AppSettings) {
   for (const page of pages) {
-    await downloadPagePng(page)
+    await downloadPagePng(page, globalSettings, pages)
   }
 }
 
-export async function downloadAllPagesAsZip(pages: Page[], zipName?: string) {
+export async function downloadAllPagesAsZip(
+  pages: Page[],
+  globalSettings: AppSettings,
+  zipName?: string,
+) {
   const zip = new JSZip()
 
   for (const page of pages) {
-    const dataUrl = page.isCollage
-      ? page.thumbnailDataUrl
-      : await renderPageToDataUrl(page.settings, page.sourceImageDataUrl, page.overlays)
-
+    const dataUrl = await renderPageForExport(page, globalSettings, pages)
     const response = await fetch(dataUrl)
     const blob = await response.blob()
     zip.file(`${page.name}.png`, blob)

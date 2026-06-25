@@ -1,4 +1,10 @@
-import type { AppSettings, CollageRenderOptions, MagnifierOverlay } from '../types'
+import type {
+  AppSettings,
+  CollageRenderOptions,
+  MagnifierOverlay,
+  Page,
+  RenderPageOptions,
+} from '../types'
 import { COLLAGE_TITLE_HEIGHT_RATIO, getCollageSlots } from '../config/collage'
 import { applyOverlayTintOpacity, DEFAULT_OVERLAY_TINT_OPACITY, isTransparentOverlayTint } from '../config/overlayTintColors'
 import { enhanceOverlayPatch } from './imageEnhance'
@@ -52,6 +58,31 @@ function drawBackground(ctx: CanvasRenderingContext2D, settings: AppSettings, bg
 
   ctx.fillStyle = settings.backgroundColor
   ctx.fillRect(0, 0, settings.backgroundWidth, settings.backgroundHeight)
+}
+
+function drawPlaceholderBackground(ctx: CanvasRenderingContext2D, settings: AppSettings) {
+  const size = 16
+  ctx.fillStyle = '#1a1a22'
+  ctx.fillRect(0, 0, settings.backgroundWidth, settings.backgroundHeight)
+  ctx.fillStyle = '#252530'
+  for (let y = 0; y < settings.backgroundHeight; y += size) {
+    for (let x = 0; x < settings.backgroundWidth; x += size) {
+      if ((x / size + y / size) % 2 === 0) {
+        ctx.fillRect(x, y, size, size)
+      }
+    }
+  }
+}
+
+export function mergeBackgroundSettings(pageSettings: AppSettings, globalSettings: AppSettings): AppSettings {
+  return {
+    ...pageSettings,
+    backgroundWidth: globalSettings.backgroundWidth,
+    backgroundHeight: globalSettings.backgroundHeight,
+    backgroundColor: globalSettings.backgroundColor,
+    useSolidBackground: globalSettings.useSolidBackground,
+    backgroundImageDataUrl: globalSettings.backgroundImageDataUrl,
+  }
 }
 
 function drawBlurredContent(
@@ -155,6 +186,7 @@ export async function renderPageToCanvas(
   settings: AppSettings,
   sourceImageDataUrl: string,
   overlays: MagnifierOverlay[],
+  renderOptions: RenderPageOptions = {},
 ): Promise<void> {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -163,11 +195,19 @@ export async function renderPageToCanvas(
   canvas.height = settings.backgroundHeight
 
   const sourceImage = await loadImage(sourceImageDataUrl)
-  const bgImage = settings.backgroundImageDataUrl
-    ? await loadImage(settings.backgroundImageDataUrl)
-    : null
 
-  drawBackground(ctx, settings, bgImage)
+  if (renderOptions.skipBackground) {
+    if (renderOptions.showPlaceholderBackground) {
+      drawPlaceholderBackground(ctx, settings)
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+  } else {
+    const bgImage = settings.backgroundImageDataUrl
+      ? await loadImage(settings.backgroundImageDataUrl)
+      : null
+    drawBackground(ctx, settings, bgImage)
+  }
 
   const placement = getContentPlacement(
     sourceImage.naturalWidth,
@@ -194,13 +234,33 @@ export async function renderPageToDataUrl(
   overlays: MagnifierOverlay[],
   mimeType = 'image/png',
   quality?: number,
+  renderOptions: RenderPageOptions = {},
 ): Promise<string> {
   const canvas = document.createElement('canvas')
-  await renderPageToCanvas(canvas, settings, sourceImageDataUrl, overlays)
+  await renderPageToCanvas(canvas, settings, sourceImageDataUrl, overlays, renderOptions)
   if (mimeType === 'image/jpeg' && quality !== undefined) {
     return canvas.toDataURL(mimeType, quality)
   }
   return canvas.toDataURL(mimeType)
+}
+
+export async function renderCollagePanelDataUrls(pages: Page[]): Promise<string[]> {
+  return Promise.all(
+    pages.map((page) =>
+      renderPageToDataUrl(page.settings, page.sourceImageDataUrl, page.overlays, 'image/png', undefined, {
+        skipBackground: true,
+      }),
+    ),
+  )
+}
+
+export async function renderCollageFromPages(
+  panelPages: Page[],
+  backgroundSettings: AppSettings,
+  options: CollageRenderOptions = { titles: [] },
+): Promise<string> {
+  const panelDataUrls = await renderCollagePanelDataUrls(panelPages)
+  return renderCollageToDataUrl(panelDataUrls, backgroundSettings, options)
 }
 
 function drawCollageSlotTitle(
@@ -288,7 +348,15 @@ export async function renderCollageToDataUrl(
     ? await loadImage(settings.backgroundImageDataUrl)
     : null
 
-  drawBackground(ctx, settings, bgImage)
+  if (options.skipBackground) {
+    if (options.showPlaceholderBackground) {
+      drawPlaceholderBackground(ctx, settings)
+    } else {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    }
+  } else {
+    drawBackground(ctx, settings, bgImage)
+  }
 
   const showTitles = options.showTitles ?? true
   const titleHeight = showTitles ? Math.round(canvas.height * COLLAGE_TITLE_HEIGHT_RATIO) : 0

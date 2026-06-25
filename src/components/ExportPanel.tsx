@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { downloadAllPagesAsPngs, downloadAllPagesAsZip, downloadPagePng } from '../utils/export'
+import { BackgroundControls } from './BackgroundControls'
+import { ExportPagePreview } from './ExportPagePreview'
 
 export function ExportPanel() {
   const pages = useAppStore((state) => state.pages)
@@ -18,24 +20,30 @@ export function ExportPanel() {
 
   if (pages.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
-        No pages to export yet.
+      <div className="space-y-6">
+        <BackgroundControls />
+        <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 p-10 text-center text-sm text-zinc-400">
+          No pages to export yet.
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-6">
+      <BackgroundControls />
+
       <section className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
         <h2 className="mb-2 text-lg font-semibold">Bulk export</h2>
         <p className="mb-4 text-sm text-zinc-400">
-          Export all {pages.length} saved pages at full {settings.backgroundWidth}×{settings.backgroundHeight} resolution.
+          Export all {pages.length} saved pages at full {settings.backgroundWidth}×
+          {settings.backgroundHeight} resolution with the background above applied.
         </p>
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
             disabled={isExporting}
-            onClick={() => void runExport(() => downloadAllPagesAsZip(pages))}
+            onClick={() => void runExport(() => downloadAllPagesAsZip(pages, settings))}
             className="rounded-lg bg-rose-500 px-4 py-2 text-sm font-medium text-white enabled:hover:bg-rose-400 disabled:opacity-40"
           >
             Download all as ZIP
@@ -43,7 +51,7 @@ export function ExportPanel() {
           <button
             type="button"
             disabled={isExporting}
-            onClick={() => void runExport(() => downloadAllPagesAsPngs(pages))}
+            onClick={() => void runExport(() => downloadAllPagesAsPngs(pages, settings))}
             className="rounded-lg bg-zinc-800 px-4 py-2 text-sm enabled:hover:bg-zinc-700 disabled:opacity-40"
           >
             Download all as PNGs
@@ -57,11 +65,7 @@ export function ExportPanel() {
             key={page.id}
             className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40"
           >
-            <img
-              src={page.thumbnailDataUrl}
-              alt={page.name}
-              className="h-36 w-full object-cover"
-            />
+            <ExportPagePreview page={page} settings={settings} allPages={pages} />
             <div className="flex items-center justify-between gap-2 p-4">
               <div>
                 <h3 className="font-medium">{page.name}</h3>
@@ -72,7 +76,7 @@ export function ExportPanel() {
               <button
                 type="button"
                 disabled={isExporting}
-                onClick={() => void runExport(() => downloadPagePng(page))}
+                onClick={() => void runExport(() => downloadPagePng(page, settings, pages))}
                 className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs enabled:hover:bg-zinc-700 disabled:opacity-40"
               >
                 PNG

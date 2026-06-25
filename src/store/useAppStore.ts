@@ -14,7 +14,7 @@ import type {
 } from '../types'
 import { detectGreenMarkers } from '../utils/markerDetector'
 import { createId, loadImage, readFileAsDataUrl } from '../utils/imageLoader'
-import { renderCollageToDataUrl, renderPageToDataUrl } from '../utils/canvasRenderer'
+import { renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
 import { idbStorage } from '../utils/idbStorage'
 import {
   buildCollageTitles,
@@ -411,8 +411,9 @@ export const useAppStore = create<AppState>()(
           settings,
           editor.sourceImageDataUrl,
           editor.overlays,
-          'image/jpeg',
-          0.82,
+          'image/png',
+          undefined,
+          { skipBackground: true, showPlaceholderBackground: true },
         )
 
         const page: Page = {
@@ -521,29 +522,31 @@ export const useAppStore = create<AppState>()(
         if (selectedPages.length < MIN_COLLAGE_PANELS) return
 
         try {
-          const thumbnails = selectedPages.map((page) => page.thumbnailDataUrl)
-
-          const collageDataUrl = await renderCollageToDataUrl(
-            thumbnails,
-            settings,
-            getCollageRenderOptions(
-              collageTitles,
-              selectedPages.length,
-              collageShowTitles,
-              collageImageScales,
-            ),
+          const collageOptions = getCollageRenderOptions(
+            collageTitles,
+            selectedPages.length,
+            collageShowTitles,
+            collageImageScales,
           )
-          if (!collageDataUrl) return
+
+          const previewDataUrl = await renderCollageFromPages(selectedPages, settings, {
+            ...collageOptions,
+            skipBackground: true,
+            showPlaceholderBackground: true,
+          })
+          if (!previewDataUrl) return
 
           const collagePage: Page = {
             id: createId(),
             name: name ?? `Collage ${pages.filter((page) => page.isCollage).length + 1}`,
-            sourceImageDataUrl: collageDataUrl,
+            sourceImageDataUrl: previewDataUrl,
             overlays: [],
             settings: { ...settings },
-            thumbnailDataUrl: collageDataUrl,
+            thumbnailDataUrl: previewDataUrl,
             createdAt: Date.now(),
             isCollage: true,
+            collagePanelPageIds: selectedPages.map((page) => page.id),
+            collageRenderOptions: collageOptions,
           }
 
           set((state) => ({

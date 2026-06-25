@@ -1,13 +1,9 @@
-import { useRef } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { OverlayTintPicker } from './OverlayTintPicker'
 
 export function SettingsPanel() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const settings = useAppStore((state) => state.settings)
   const updateSettings = useAppStore((state) => state.updateSettings)
-  const uploadBackgroundImage = useAppStore((state) => state.uploadBackgroundImage)
-  const clearBackgroundImage = useAppStore((state) => state.clearBackgroundImage)
 
   const updateMarkerDetection = (key: string, value: number) => {
     updateSettings({
@@ -16,13 +12,6 @@ export function SettingsPanel() {
         [key]: value,
       },
     })
-  }
-
-  const handleBackgroundUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    await uploadBackgroundImage(file)
-    event.target.value = ''
   }
 
   return (
@@ -66,52 +55,6 @@ export function SettingsPanel() {
               className="mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2"
             />
           </label>
-        </div>
-      </section>
-
-      <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-        <h2 className="text-lg font-semibold">Background</h2>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={settings.useSolidBackground}
-            onChange={(e) => updateSettings({ useSolidBackground: e.target.checked })}
-          />
-          Use solid color background
-        </label>
-        <label className="block text-sm">
-          Background color
-          <input
-            type="color"
-            value={settings.backgroundColor}
-            onChange={(e) => updateSettings({ backgroundColor: e.target.value })}
-            className="mt-1 h-10 w-full cursor-pointer rounded-lg border border-zinc-700 bg-zinc-950"
-          />
-        </label>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          onChange={(event) => void handleBackgroundUpload(event)}
-          className="hidden"
-        />
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-lg bg-zinc-800 px-3 py-2 text-sm hover:bg-zinc-700"
-          >
-            Upload background image
-          </button>
-          {settings.backgroundImageDataUrl && (
-            <button
-              type="button"
-              onClick={clearBackgroundImage}
-              className="rounded-lg bg-zinc-800 px-3 py-2 text-sm hover:bg-zinc-700"
-            >
-              Clear
-            </button>
-          )}
         </div>
       </section>
 
