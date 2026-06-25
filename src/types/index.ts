@@ -86,7 +86,6 @@ export type CollageLayout = 'horizontal-2'
 export type CollageRenderOptions = {
   titles: string[]
   showTitles?: boolean
-  showCenterDivider?: boolean
   imageScales?: number[]
   skipBackground?: boolean
   showPlaceholderBackground?: boolean

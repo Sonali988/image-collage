@@ -70,7 +70,6 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
         const collageOptions: CollageRenderOptions = {
           titles: collageTitles.slice(0, selectedPages.length),
           showTitles: collageShowTitles,
-          showCenterDivider: selectedPages.length === 2,
           imageScales: collageImageScales.slice(0, selectedPages.length),
         }
 

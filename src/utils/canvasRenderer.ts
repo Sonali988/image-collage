@@ -91,6 +91,17 @@ function drawBlurredContent(
   placement: ContentPlacement,
   blurAmount: number,
 ) {
+  if (blurAmount <= 0) {
+    ctx.drawImage(
+      sourceImage,
+      placement.drawX,
+      placement.drawY,
+      placement.drawW,
+      placement.drawH,
+    )
+    return
+  }
+
   const temp = document.createElement('canvas')
   temp.width = placement.drawW
   temp.height = placement.drawH
@@ -315,22 +326,6 @@ function drawCollageSlotImage(
   ctx.restore()
 }
 
-function drawCollageCenterDivider(
-  ctx: CanvasRenderingContext2D,
-  canvasWidth: number,
-  canvasHeight: number,
-  startY: number,
-) {
-  ctx.save()
-  ctx.strokeStyle = '#ffffff'
-  ctx.lineWidth = 3
-  ctx.setLineDash([14, 10])
-  ctx.beginPath()
-  ctx.moveTo(canvasWidth / 2, startY)
-  ctx.lineTo(canvasWidth / 2, canvasHeight)
-  ctx.stroke()
-  ctx.restore()
-}
 
 export async function renderCollageToDataUrl(
   pageDataUrls: string[],
@@ -391,14 +386,6 @@ export async function renderCollageToDataUrl(
     )
   })
 
-  if (options.showCenterDivider) {
-    drawCollageCenterDivider(
-      ctx,
-      canvas.width,
-      canvas.height,
-      showTitles ? titleHeight * 0.6 : 0,
-    )
-  }
 
   return canvas.toDataURL('image/png')
 }

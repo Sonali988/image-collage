@@ -202,7 +202,6 @@ function getCollageRenderOptions(
   return {
     titles: collageTitles.slice(0, imageCount),
     showTitles: collageShowTitles,
-    showCenterDivider: imageCount === 2,
     imageScales: collageImageScales.slice(0, imageCount),
   }
 }

@@ -6,7 +6,7 @@ export const DEFAULTS: AppSettings = {
   backgroundHeight: 720,
   contentWidth: 540,
   contentHeight: 720,
-  defaultZoomFactor: 1.5,
+  defaultZoomFactor: 1.25,
   blurAmount: 3,
   overlayBorderWidth: 2,
   overlayTintPreset: 'red',

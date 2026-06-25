@@ -52,20 +52,29 @@ export async function downloadPagePng(
   saveAs(blob, filename ?? `${page.name}.png`)
 }
 
-export async function downloadAllPagesAsPngs(pages: Page[], globalSettings: AppSettings) {
-  for (const page of pages) {
+export async function downloadSelectedPagesAsPngs(
+  pages: Page[],
+  selectedIds: string[],
+  globalSettings: AppSettings,
+) {
+  const selected = pages.filter((page) => selectedIds.includes(page.id))
+  for (const page of selected) {
     await downloadPagePng(page, globalSettings, pages)
   }
 }
 
-export async function downloadAllPagesAsZip(
+export async function downloadSelectedPagesAsZip(
   pages: Page[],
+  selectedIds: string[],
   globalSettings: AppSettings,
   zipName?: string,
 ) {
+  const selected = pages.filter((page) => selectedIds.includes(page.id))
+  if (selected.length === 0) return
+
   const zip = new JSZip()
 
-  for (const page of pages) {
+  for (const page of selected) {
     const dataUrl = await renderPageForExport(page, globalSettings, pages)
     const response = await fetch(dataUrl)
     const blob = await response.blob()
