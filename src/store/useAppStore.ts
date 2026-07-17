@@ -1,11 +1,12 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { DEFAULTS } from '../config/defaults'
+import { DEFAULTS, withExportCanvasSize } from '../config/defaults'
 import { OVERLAY_TINT_COLORS } from '../config/overlayTintColors'
 import type {
   AppSettings,
   CollageLayout,
   CollageRenderOptions,
+  OverlayClipboard,
   EditorState,
   MagnifierOverlay,
   MarkerRect,
@@ -38,6 +39,12 @@ function normalizeSettings(settings: AppSettings): AppSettings {
   if (LEGACY_BACKGROUND_COLORS.has(normalized.backgroundColor.toLowerCase())) {
     normalized.backgroundColor = DEFAULTS.backgroundColor
   }
+
+  // Always keep the fixed export canvas size (preview CSS size must never leak in).
+  normalized.backgroundWidth = DEFAULTS.backgroundWidth
+  normalized.backgroundHeight = DEFAULTS.backgroundHeight
+  normalized.contentWidth = DEFAULTS.contentWidth
+  normalized.contentHeight = DEFAULTS.contentHeight
 
   if (!normalized.overlayTintPreset) {
     normalized.overlayTintPreset = DEFAULTS.overlayTintPreset
@@ -104,6 +111,25 @@ function nextCropLabel(overlays: MagnifierOverlay[]): string {
   return `Crop ${cropCount + 1}`
 }
 
+function nextMarkerLabel(overlays: MagnifierOverlay[]): string {
+  const markerCount = overlays.filter((overlay) => overlay.type === 'marker').length
+  return `Marker ${markerCount + 1}`
+}
+
+function nextOverlayLabel(overlays: MagnifierOverlay[], type: MagnifierOverlay['type']): string {
+  return type === 'crop' ? nextCropLabel(overlays) : nextMarkerLabel(overlays)
+}
+
+function nextPastedPageName(baseName: string, pages: Page[]): string {
+  const root = baseName.trim() || 'Page'
+  const existing = new Set(pages.filter((page) => !page.isCollage).map((page) => page.name))
+  if (!existing.has(root)) return root
+
+  let index = 2
+  while (existing.has(`${root} (${index})`)) index += 1
+  return `${root} (${index})`
+}
+
 function normalizePage(page: Page): Page {
   return {
     ...page,
@@ -128,6 +154,7 @@ type AppState = {
   settings: AppSettings
   editor: EditorState
   pages: Page[]
+  overlayClipboard: OverlayClipboard | null
   collageSelectedIds: string[]
   collageLayout: CollageLayout
   collageTitles: string[]
@@ -140,16 +167,24 @@ type AppState = {
   clearBackgroundImage: () => void
   redetectMarkers: () => Promise<void>
   setCropMode: (enabled: boolean) => void
+  setDocumentCropMode: (enabled: boolean) => void
+  cropDocument: (rect: MarkerRect) => void
+  clearDocumentCrop: () => void
   addCropOverlay: (rect: MarkerRect) => void
   updateOverlayRect: (id: string, rect: MarkerRect) => void
   updateOverlayScale: (id: string, userScale: number) => void
   updateOverlayOffset: (id: string, offsetX: number, offsetY: number) => void
   removeOverlay: (id: string) => void
+  setSelectedOverlayId: (id: string | null) => void
+  copySelectedOverlay: () => boolean
+  pasteCopiedOverlay: () => Promise<boolean>
+  clearOverlayClipboard: () => void
   resetOverlayAdjustments: () => void
-  saveCurrentPage: (name?: string) => Promise<void>
+  saveCurrentPage: (name?: string, options?: { asNew?: boolean }) => Promise<void>
   deletePage: (id: string) => void
-  renameCollage: (id: string, name: string) => void
+  renamePage: (id: string, name: string) => void
   loadPageIntoEditor: (id: string) => void
+  loadCollageIntoBuilder: (id: string) => void
   toggleCollageSelection: (id: string) => void
   setCollageTitle: (index: number, title: string) => void
   setCollageShowTitles: (show: boolean) => void
@@ -160,10 +195,14 @@ type AppState = {
 const initialEditor: EditorState = {
   sourceImageDataUrl: null,
   sourceImageName: '',
+  activePageId: null,
   overlays: [],
+  selectedOverlayId: null,
+  documentCropRect: null,
   isDetecting: false,
   detectionError: null,
   isCropMode: false,
+  isDocumentCropMode: false,
 }
 
 function runMarkerDetection(
@@ -213,6 +252,7 @@ export const useAppStore = create<AppState>()(
       settings: DEFAULTS,
       editor: initialEditor,
       pages: [],
+      overlayClipboard: null,
       collageSelectedIds: [],
       collageLayout: 'horizontal-2',
       collageTitles: ['BEFORE', 'AFTER', ''],
@@ -223,7 +263,7 @@ export const useAppStore = create<AppState>()(
 
       updateSettings: (partial) =>
         set((state) => ({
-          settings: { ...state.settings, ...partial },
+          settings: withExportCanvasSize({ ...state.settings, ...partial }),
         })),
 
       uploadSourceImage: async (file) => {
@@ -236,10 +276,14 @@ export const useAppStore = create<AppState>()(
             ...state.editor,
             sourceImageDataUrl: dataUrl,
             sourceImageName: file.name,
+            activePageId: null,
             overlays: [],
+            selectedOverlayId: null,
+            documentCropRect: null,
             isDetecting: true,
             detectionError: null,
             isCropMode: false,
+            isDocumentCropMode: false,
           },
         }))
 
@@ -327,7 +371,35 @@ export const useAppStore = create<AppState>()(
 
       setCropMode: (enabled) =>
         set((state) => ({
-          editor: { ...state.editor, isCropMode: enabled },
+          editor: {
+            ...state.editor,
+            isCropMode: enabled,
+            isDocumentCropMode: enabled ? false : state.editor.isDocumentCropMode,
+          },
+        })),
+
+      setDocumentCropMode: (enabled) =>
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            isDocumentCropMode: enabled,
+            isCropMode: enabled ? false : state.editor.isCropMode,
+          },
+        })),
+
+      cropDocument: (rect) => {
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            documentCropRect: rect,
+            isDocumentCropMode: false,
+          },
+        }))
+      },
+
+      clearDocumentCrop: () =>
+        set((state) => ({
+          editor: { ...state.editor, documentCropRect: null },
         })),
 
       addCropOverlay: (rect) =>
@@ -346,6 +418,7 @@ export const useAppStore = create<AppState>()(
             editor: {
               ...state.editor,
               overlays: [...state.editor.overlays, overlay],
+              selectedOverlayId: overlay.id,
               isCropMode: false,
             },
           }
@@ -386,8 +459,72 @@ export const useAppStore = create<AppState>()(
           editor: {
             ...state.editor,
             overlays: state.editor.overlays.filter((overlay) => overlay.id !== id),
+            selectedOverlayId:
+              state.editor.selectedOverlayId === id
+                ? null
+                : state.editor.selectedOverlayId,
           },
         })),
+
+      setSelectedOverlayId: (id) =>
+        set((state) => ({
+          editor: { ...state.editor, selectedOverlayId: id },
+        })),
+
+      copySelectedOverlay: () => {
+        const { editor } = get()
+        const selected = editor.overlays.find(
+          (overlay) => overlay.id === editor.selectedOverlayId,
+        )
+        if (!selected) return false
+
+        set({
+          overlayClipboard: {
+            type: selected.type,
+            rect: { ...selected.rect },
+            userScale: selected.userScale,
+            offsetX: selected.offsetX ?? 0,
+            offsetY: selected.offsetY ?? 0,
+          },
+        })
+        return true
+      },
+
+      pasteCopiedOverlay: async () => {
+        const { editor, overlayClipboard } = get()
+        if (!overlayClipboard || !editor.sourceImageDataUrl) return false
+
+        const overlay: MagnifierOverlay = {
+          id: createId(),
+          label: nextOverlayLabel(editor.overlays, overlayClipboard.type),
+          type: overlayClipboard.type,
+          rect: { ...overlayClipboard.rect },
+          userScale: overlayClipboard.userScale,
+          offsetX: overlayClipboard.offsetX,
+          offsetY: overlayClipboard.offsetY,
+        }
+
+        const nextOverlays = [...editor.overlays, overlay]
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            overlays: nextOverlays,
+            selectedOverlayId: overlay.id,
+          },
+        }))
+
+        // Always save as a new page so the source page is not overwritten.
+        const baseName =
+          editor.sourceImageName.replace(/\.[^.]+$/, '') ||
+          editor.sourceImageName ||
+          'Page'
+        await get().saveCurrentPage(nextPastedPageName(baseName, get().pages), {
+          asNew: true,
+        })
+        return true
+      },
+
+      clearOverlayClipboard: () => set({ overlayClipboard: null }),
 
       resetOverlayAdjustments: () =>
         set((state) => ({
@@ -402,8 +539,8 @@ export const useAppStore = create<AppState>()(
           },
         })),
 
-      saveCurrentPage: async (name) => {
-        const { editor, settings } = get()
+      saveCurrentPage: async (name, options) => {
+        const { editor, settings, pages } = get()
         if (!editor.sourceImageDataUrl) return
 
         const thumbnailDataUrl = await renderPageToDataUrl(
@@ -412,8 +549,46 @@ export const useAppStore = create<AppState>()(
           editor.overlays,
           'image/png',
           undefined,
-          { skipBackground: true, showPlaceholderBackground: true },
+          {
+            skipBackground: true,
+            showPlaceholderBackground: true,
+            documentCropRect: editor.documentCropRect,
+          },
         )
+
+        const existing =
+          !options?.asNew && editor.activePageId != null
+            ? pages.find(
+                (page) => page.id === editor.activePageId && !page.isCollage,
+              )
+            : undefined
+
+        if (existing) {
+          const updated: Page = {
+            ...existing,
+            name:
+              name ??
+              existing.name ??
+              (editor.sourceImageName.replace(/\.[^.]+$/, '') || existing.name),
+            sourceImageDataUrl: editor.sourceImageDataUrl,
+            overlays: editor.overlays,
+            settings: { ...settings },
+            documentCropRect: editor.documentCropRect,
+            thumbnailDataUrl,
+          }
+
+          set((state) => ({
+            pages: state.pages.map((page) =>
+              page.id === existing.id ? updated : page,
+            ),
+            editor: {
+              ...state.editor,
+              sourceImageName: updated.name,
+              activePageId: existing.id,
+            },
+          }))
+          return
+        }
 
         const page: Page = {
           id: createId(),
@@ -424,45 +599,103 @@ export const useAppStore = create<AppState>()(
           sourceImageDataUrl: editor.sourceImageDataUrl,
           overlays: editor.overlays,
           settings: { ...settings },
+          documentCropRect: editor.documentCropRect,
           thumbnailDataUrl,
           createdAt: Date.now(),
         }
 
-        set((state) => ({ pages: [page, ...state.pages] }))
+        set((state) => ({
+          pages: [page, ...state.pages],
+          editor: { ...state.editor, activePageId: page.id, sourceImageName: page.name },
+        }))
       },
 
       deletePage: (id) =>
         set((state) => ({
           pages: state.pages.filter((page) => page.id !== id),
           collageSelectedIds: state.collageSelectedIds.filter((pageId) => pageId !== id),
+          editor:
+            state.editor.activePageId === id
+              ? { ...state.editor, activePageId: null }
+              : state.editor,
         })),
 
-      renameCollage: (id, name) => {
+      renamePage: (id, name) => {
         const trimmed = name.trim()
         if (!trimmed) return
 
-        set((state) => ({
-          pages: state.pages.map((page) =>
-            page.id === id && page.isCollage ? { ...page, name: trimmed } : page,
-          ),
-        }))
+        const page = get().pages.find((item) => item.id === id)
+        if (!page) return
+
+        set((state) => {
+          const isActiveDocument =
+            !page.isCollage &&
+            state.editor.sourceImageDataUrl === page.sourceImageDataUrl &&
+            state.editor.sourceImageName === page.name
+
+          return {
+            pages: state.pages.map((item) =>
+              item.id === id ? { ...item, name: trimmed } : item,
+            ),
+            editor: isActiveDocument
+              ? { ...state.editor, sourceImageName: trimmed }
+              : state.editor,
+          }
+        })
       },
 
       loadPageIntoEditor: (id) => {
         const page = get().pages.find((item) => item.id === id && !item.isCollage)
         if (!page) return
 
+        const { settings: currentSettings } = get()
         set({
           activeTab: 'editor',
-          settings: { ...page.settings },
+          settings: withExportCanvasSize({
+            ...page.settings,
+            // Keep current background image / color choices from the session.
+            backgroundColor: currentSettings.backgroundColor,
+            useSolidBackground: currentSettings.useSolidBackground,
+            backgroundImageDataUrl: currentSettings.backgroundImageDataUrl,
+          }),
           editor: {
             sourceImageDataUrl: page.sourceImageDataUrl,
             sourceImageName: page.name,
+            activePageId: page.id,
             overlays: page.overlays.map(normalizeOverlay),
+            selectedOverlayId: null,
+            documentCropRect: page.documentCropRect ?? null,
             isDetecting: false,
             detectionError: null,
             isCropMode: false,
+            isDocumentCropMode: false,
           },
+        })
+      },
+
+      loadCollageIntoBuilder: (id) => {
+        const page = get().pages.find((item) => item.id === id && item.isCollage)
+        if (!page?.collagePanelPageIds) return
+
+        const panelIds = page.collagePanelPageIds.filter((panelId) =>
+          get().pages.some((item) => item.id === panelId && !item.isCollage),
+        )
+        if (panelIds.length < MIN_COLLAGE_PANELS) return
+
+        const options = page.collageRenderOptions ?? { titles: [] }
+        const titles = options.titles ?? []
+        const imageScales = options.imageScales ?? [1, 1, 1]
+
+        set({
+          activeTab: 'collage',
+          collageSelectedIds: panelIds,
+          collageTitles: [titles[0] ?? 'BEFORE', titles[1] ?? 'AFTER', titles[2] ?? ''],
+          collageShowTitles: options.showTitles ?? true,
+          collageImageScales: [
+            imageScales[0] ?? 1,
+            imageScales[1] ?? 1,
+            imageScales[2] ?? 1,
+          ],
         })
       },
 

@@ -37,6 +37,9 @@ export async function renderPageForExport(page: Page, globalSettings: AppSetting
     mergeBackgroundSettings(page.settings, globalSettings),
     page.sourceImageDataUrl,
     page.overlays,
+    'image/png',
+    undefined,
+    { documentCropRect: page.documentCropRect ?? null },
   )
 }
 

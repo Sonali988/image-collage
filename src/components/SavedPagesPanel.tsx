@@ -24,7 +24,7 @@ export function SavedPagesPanel({
   const sourceImageName = useAppStore((state) => state.editor.sourceImageName)
   const loadPageIntoEditor = useAppStore((state) => state.loadPageIntoEditor)
   const deletePage = useAppStore((state) => state.deletePage)
-  const renameCollage = useAppStore((state) => state.renameCollage)
+  const renamePage = useAppStore((state) => state.renamePage)
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -45,7 +45,7 @@ export function SavedPagesPanel({
   }
 
   const submitRename = (pageId: string) => {
-    renameCollage(pageId, renameValue)
+    renamePage(pageId, renameValue)
     cancelRename()
   }
 
