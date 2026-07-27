@@ -17,12 +17,15 @@ export function ImageEditor() {
   const settings = useAppStore((state) => state.settings)
   const updateSettings = useAppStore((state) => state.updateSettings)
   const uploadSourceImage = useAppStore((state) => state.uploadSourceImage)
+  const rotateSourceImage = useAppStore((state) => state.rotateSourceImage)
   const saveCurrentPage = useAppStore((state) => state.saveCurrentPage)
   const setDocumentCropMode = useAppStore((state) => state.setDocumentCropMode)
   const clearDocumentCrop = useAppStore((state) => state.clearDocumentCrop)
   const copySelectedOverlay = useAppStore((state) => state.copySelectedOverlay)
   const pasteCopiedOverlay = useAppStore((state) => state.pasteCopiedOverlay)
+  const isDetecting = useAppStore((state) => state.editor.isDetecting)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [isRotating, setIsRotating] = useState(false)
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -73,6 +76,15 @@ export function ImageEditor() {
     window.setTimeout(() => setSaveMessage(null), 2500)
   }
 
+  const handleRotate = async (degrees: 90 | -90) => {
+    setIsRotating(true)
+    try {
+      await rotateSourceImage(degrees)
+    } finally {
+      setIsRotating(false)
+    }
+  }
+
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-3 lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="flex max-h-[38vh] flex-col gap-2 overflow-y-auto pr-0.5 lg:max-h-none">
@@ -109,7 +121,27 @@ export function ImageEditor() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  disabled={isDocumentCropMode || isCropMode}
+                  disabled={isRotating || isDetecting || isDocumentCropMode || isCropMode}
+                  onClick={() => void handleRotate(-90)}
+                  className="flex-1 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium enabled:hover:bg-zinc-700 disabled:opacity-40"
+                  title="Rotate left 90°"
+                >
+                  {isRotating ? '…' : 'Rotate ↶'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isRotating || isDetecting || isDocumentCropMode || isCropMode}
+                  onClick={() => void handleRotate(90)}
+                  className="flex-1 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium enabled:hover:bg-zinc-700 disabled:opacity-40"
+                  title="Rotate right 90°"
+                >
+                  {isRotating ? '…' : 'Rotate ↷'}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isDocumentCropMode || isCropMode || isRotating || isDetecting}
                   onClick={() => setDocumentCropMode(true)}
                   className="flex-1 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-amber-500 disabled:opacity-40"
                 >
@@ -135,7 +167,7 @@ export function ImageEditor() {
                 </button>
               )}
               <p className="text-[10px] leading-snug text-zinc-500">
-                Crops the background document only. Magnifier highlights stay full size.
+                Rotate or crop the document. Markers are re-detected after rotate.
               </p>
             </div>
           )}

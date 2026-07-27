@@ -27,8 +27,12 @@ export type OverlayClipboard = {
 }
 
 export type MarkerDetectionSettings = {
+  /** Green marker hue range (degrees). */
   hueMin: number
   hueMax: number
+  /** Blue marker hue range (degrees). */
+  blueHueMin: number
+  blueHueMax: number
   satMin: number
   lightMin: number
   lightMax: number

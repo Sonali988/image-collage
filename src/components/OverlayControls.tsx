@@ -226,7 +226,7 @@ export function OverlayControls() {
   if (isDetecting) {
     return (
       <p className="text-sm text-zinc-400">
-        Detecting green markers… This may take a few seconds on large images.
+        Detecting green/blue markers… This may take a few seconds on large images.
       </p>
     )
   }

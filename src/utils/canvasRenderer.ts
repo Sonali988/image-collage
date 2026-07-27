@@ -2,6 +2,7 @@ import type {
   AppSettings,
   CollageRenderOptions,
   MagnifierOverlay,
+  MarkerRect,
   Page,
   RenderPageOptions,
 } from '../types'
@@ -25,7 +26,8 @@ export function getContentPlacement(
 ): ContentPlacement {
   const contentX = (settings.backgroundWidth - settings.contentWidth) / 2
   const contentY = (settings.backgroundHeight - settings.contentHeight) / 2
-  const scale = Math.max(
+  // Fit entire document inside the content area (contain) — never auto-crop.
+  const scale = Math.min(
     settings.contentWidth / imageWidth,
     settings.contentHeight / imageHeight,
   )
@@ -88,12 +90,31 @@ export function mergeBackgroundSettings(pageSettings: AppSettings, globalSetting
 function drawBlurredContent(
   ctx: CanvasRenderingContext2D,
   sourceImage: HTMLImageElement,
-  placement: ContentPlacement,
+  settings: AppSettings,
   blurAmount: number,
+  documentCropRect?: MarkerRect | null,
 ) {
+  let srcX = 0
+  let srcY = 0
+  let srcW = sourceImage.naturalWidth
+  let srcH = sourceImage.naturalHeight
+
+  if (documentCropRect) {
+    srcX = documentCropRect.x * sourceImage.naturalWidth
+    srcY = documentCropRect.y * sourceImage.naturalHeight
+    srcW = documentCropRect.w * sourceImage.naturalWidth
+    srcH = documentCropRect.h * sourceImage.naturalHeight
+  }
+
+  const placement = getContentPlacement(srcW, srcH, settings)
+
   if (blurAmount <= 0) {
     ctx.drawImage(
       sourceImage,
+      srcX,
+      srcY,
+      srcW,
+      srcH,
       placement.drawX,
       placement.drawY,
       placement.drawW,
@@ -103,13 +124,13 @@ function drawBlurredContent(
   }
 
   const temp = document.createElement('canvas')
-  temp.width = placement.drawW
-  temp.height = placement.drawH
+  temp.width = Math.max(1, Math.round(placement.drawW))
+  temp.height = Math.max(1, Math.round(placement.drawH))
   const tempCtx = temp.getContext('2d')
   if (!tempCtx) return
 
   tempCtx.filter = `blur(${blurAmount}px)`
-  tempCtx.drawImage(sourceImage, 0, 0, placement.drawW, placement.drawH)
+  tempCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, 0, 0, temp.width, temp.height)
   ctx.drawImage(temp, placement.drawX, placement.drawY, placement.drawW, placement.drawH)
 }
 
@@ -220,6 +241,7 @@ export async function renderPageToCanvas(
     drawBackground(ctx, settings, bgImage)
   }
 
+  const documentCropRect = renderOptions.documentCropRect ?? null
   const placement = getContentPlacement(
     sourceImage.naturalWidth,
     sourceImage.naturalHeight,
@@ -232,7 +254,13 @@ export async function renderPageToCanvas(
     ctx.beginPath()
     ctx.rect(contentBounds.x, contentBounds.y, contentBounds.width, contentBounds.height)
     ctx.clip()
-    drawBlurredContent(ctx, sourceImage, placement, settings.blurAmount)
+    drawBlurredContent(
+      ctx,
+      sourceImage,
+      settings,
+      settings.blurAmount,
+      documentCropRect,
+    )
     ctx.restore()
   }
 

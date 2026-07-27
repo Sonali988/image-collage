@@ -14,7 +14,7 @@ import type {
   TabId,
 } from '../types'
 import { detectGreenMarkers } from '../utils/markerDetector'
-import { createId, loadImage, readFileAsDataUrl } from '../utils/imageLoader'
+import { createId, loadImage, readFileAsDataUrl, rotateImageDataUrl } from '../utils/imageLoader'
 import { renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
 import { idbStorage } from '../utils/idbStorage'
 import {
@@ -130,6 +130,32 @@ function nextPastedPageName(baseName: string, pages: Page[]): string {
   return `${root} (${index})`
 }
 
+/** Map a normalized rect when the source image is rotated. */
+function rotateNormalizedRect(rect: MarkerRect, degrees: 90 | -90 | 180): MarkerRect {
+  if (degrees === 90) {
+    return {
+      x: 1 - rect.y - rect.h,
+      y: rect.x,
+      w: rect.h,
+      h: rect.w,
+    }
+  }
+  if (degrees === -90) {
+    return {
+      x: rect.y,
+      y: 1 - rect.x - rect.w,
+      w: rect.h,
+      h: rect.w,
+    }
+  }
+  return {
+    x: 1 - rect.x - rect.w,
+    y: 1 - rect.y - rect.h,
+    w: rect.w,
+    h: rect.h,
+  }
+}
+
 function normalizePage(page: Page): Page {
   return {
     ...page,
@@ -163,6 +189,7 @@ type AppState = {
   setActiveTab: (tab: TabId) => void
   updateSettings: (partial: Partial<AppSettings>) => void
   uploadSourceImage: (file: File) => Promise<void>
+  rotateSourceImage: (degrees: 90 | -90 | 180) => Promise<void>
   uploadBackgroundImage: (file: File) => Promise<void>
   clearBackgroundImage: () => void
   redetectMarkers: () => Promise<void>
@@ -298,7 +325,7 @@ export const useAppStore = create<AppState>()(
               isDetecting: false,
               detectionError:
                 overlays.length === 0
-                  ? 'No green markers found. Adjust marker tolerance in Settings and re-detect.'
+                  ? 'No green or blue markers found. Adjust marker tolerance in Settings and re-detect.'
                   : null,
             },
           }))
@@ -308,6 +335,70 @@ export const useAppStore = create<AppState>()(
               ...state.editor,
               isDetecting: false,
               detectionError: 'Failed to process the uploaded image.',
+            },
+          }))
+        }
+      },
+
+      rotateSourceImage: async (degrees) => {
+        const { editor } = get()
+        if (!editor.sourceImageDataUrl) return
+
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            isDetecting: true,
+            detectionError: null,
+            isCropMode: false,
+            isDocumentCropMode: false,
+            selectedOverlayId: null,
+          },
+        }))
+
+        try {
+          const rotatedDataUrl = await rotateImageDataUrl(editor.sourceImageDataUrl, degrees)
+          const manualCrops = editor.overlays
+            .filter((overlay) => overlay.type === 'crop')
+            .map((overlay) => ({
+              ...overlay,
+              rect: rotateNormalizedRect(overlay.rect, degrees),
+              offsetX: 0,
+              offsetY: 0,
+            }))
+          const documentCropRect = editor.documentCropRect
+            ? rotateNormalizedRect(editor.documentCropRect, degrees)
+            : null
+
+          set((state) => ({
+            editor: {
+              ...state.editor,
+              sourceImageDataUrl: rotatedDataUrl,
+              overlays: manualCrops,
+              documentCropRect,
+            },
+          }))
+
+          const image = await loadImage(rotatedDataUrl)
+          const detected = await runMarkerDetection(image, get().settings)
+          const overlays = [...detected, ...manualCrops]
+
+          set((state) => ({
+            editor: {
+              ...state.editor,
+              overlays,
+              isDetecting: false,
+              detectionError:
+                detected.length === 0 && manualCrops.length === 0
+                  ? 'No green or blue markers found. Adjust marker tolerance in Settings and re-detect.'
+                  : null,
+            },
+          }))
+        } catch {
+          set((state) => ({
+            editor: {
+              ...state.editor,
+              isDetecting: false,
+              detectionError: 'Failed to rotate the document.',
             },
           }))
         }
@@ -354,7 +445,7 @@ export const useAppStore = create<AppState>()(
               isDetecting: false,
               detectionError:
                 detected.length === 0 && manualCrops.length === 0
-                  ? 'No green markers found. Adjust marker tolerance in Settings and re-detect.'
+                  ? 'No green or blue markers found. Adjust marker tolerance in Settings and re-detect.'
                   : null,
             },
           }))

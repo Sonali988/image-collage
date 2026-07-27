@@ -20,6 +20,8 @@ export const DEFAULTS: AppSettings = {
   markerDetection: {
     hueMin: 80,
     hueMax: 160,
+    blueHueMin: 185,
+    blueHueMax: 255,
     satMin: 0.3,
     lightMin: 0.2,
     lightMax: 0.9,
