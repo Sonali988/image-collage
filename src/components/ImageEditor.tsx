@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { CanvasPreview } from './CanvasPreview'
 import { OverlayControls } from './OverlayControls'
@@ -10,11 +10,56 @@ export function ImageEditor() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sourceImageDataUrl = useAppStore((state) => state.editor.sourceImageDataUrl)
   const sourceImageName = useAppStore((state) => state.editor.sourceImageName)
+  const activePageId = useAppStore((state) => state.editor.activePageId)
+  const isDocumentCropMode = useAppStore((state) => state.editor.isDocumentCropMode)
+  const documentCropRect = useAppStore((state) => state.editor.documentCropRect)
+  const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const settings = useAppStore((state) => state.settings)
   const updateSettings = useAppStore((state) => state.updateSettings)
   const uploadSourceImage = useAppStore((state) => state.uploadSourceImage)
+  const rotateSourceImage = useAppStore((state) => state.rotateSourceImage)
   const saveCurrentPage = useAppStore((state) => state.saveCurrentPage)
+  const setDocumentCropMode = useAppStore((state) => state.setDocumentCropMode)
+  const clearDocumentCrop = useAppStore((state) => state.clearDocumentCrop)
+  const copySelectedOverlay = useAppStore((state) => state.copySelectedOverlay)
+  const pasteCopiedOverlay = useAppStore((state) => state.pasteCopiedOverlay)
+  const isDetecting = useAppStore((state) => state.editor.isDetecting)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [isRotating, setIsRotating] = useState(false)
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+
+      const mod = event.metaKey || event.ctrlKey
+      if (!mod) return
+
+      if (event.key === 'c') {
+        if (copySelectedOverlay()) event.preventDefault()
+        return
+      }
+      if (event.key === 'v') {
+        event.preventDefault()
+        void pasteCopiedOverlay().then((pasted) => {
+          if (pasted) {
+            setSaveMessage('Pasted as new page')
+            window.setTimeout(() => setSaveMessage(null), 2500)
+          }
+        })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [copySelectedOverlay, pasteCopiedOverlay])
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -25,9 +70,19 @@ export function ImageEditor() {
   }
 
   const handleSave = async () => {
+    const updating = Boolean(activePageId)
     await saveCurrentPage()
-    setSaveMessage('Saved')
+    setSaveMessage(updating ? 'Updated' : 'Saved')
     window.setTimeout(() => setSaveMessage(null), 2500)
+  }
+
+  const handleRotate = async (degrees: 90 | -90) => {
+    setIsRotating(true)
+    try {
+      await rotateSourceImage(degrees)
+    } finally {
+      setIsRotating(false)
+    }
   }
 
   return (
@@ -55,11 +110,66 @@ export function ImageEditor() {
               onClick={() => void handleSave()}
               className="flex-1 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white enabled:hover:bg-emerald-500 disabled:opacity-40"
             >
-              Save
+              {activePageId ? 'Update' : 'Save'}
             </button>
           </div>
           {sourceImageName && (
             <p className="mt-2 truncate text-xs text-zinc-500">{sourceImageName}</p>
+          )}
+          {sourceImageDataUrl && (
+            <div className="mt-2 space-y-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isRotating || isDetecting || isDocumentCropMode || isCropMode}
+                  onClick={() => void handleRotate(-90)}
+                  className="flex-1 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium enabled:hover:bg-zinc-700 disabled:opacity-40"
+                  title="Rotate left 90°"
+                >
+                  {isRotating ? '…' : 'Rotate ↶'}
+                </button>
+                <button
+                  type="button"
+                  disabled={isRotating || isDetecting || isDocumentCropMode || isCropMode}
+                  onClick={() => void handleRotate(90)}
+                  className="flex-1 rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium enabled:hover:bg-zinc-700 disabled:opacity-40"
+                  title="Rotate right 90°"
+                >
+                  {isRotating ? '…' : 'Rotate ↷'}
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={isDocumentCropMode || isCropMode || isRotating || isDetecting}
+                  onClick={() => setDocumentCropMode(true)}
+                  className="flex-1 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white enabled:hover:bg-amber-500 disabled:opacity-40"
+                >
+                  {isDocumentCropMode ? 'Drag on preview…' : 'Crop document'}
+                </button>
+                {isDocumentCropMode && (
+                  <button
+                    type="button"
+                    onClick={() => setDocumentCropMode(false)}
+                    className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+              {documentCropRect && !isDocumentCropMode && (
+                <button
+                  type="button"
+                  onClick={() => clearDocumentCrop()}
+                  className="w-full rounded-md bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700"
+                >
+                  Reset document crop
+                </button>
+              )}
+              <p className="text-[10px] leading-snug text-zinc-500">
+                Rotate or crop the document. Markers are re-detected after rotate.
+              </p>
+            </div>
           )}
           {saveMessage && <p className="mt-1 text-xs text-emerald-400">{saveMessage}</p>}
         </Panel>

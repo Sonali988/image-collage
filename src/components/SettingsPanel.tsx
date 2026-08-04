@@ -102,9 +102,12 @@ export function SettingsPanel() {
       </section>
 
       <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
-        <h2 className="text-lg font-semibold">Green marker detection</h2>
+        <h2 className="text-lg font-semibold">Marker detection</h2>
+        <p className="text-xs text-zinc-500">
+          Detects green and blue highlighted regions on uploaded documents.
+        </p>
         <label className="block text-sm">
-          Hue min ({settings.markerDetection.hueMin}°)
+          Green hue min ({settings.markerDetection.hueMin}°)
           <input
             type="range"
             min={0}
@@ -115,7 +118,7 @@ export function SettingsPanel() {
           />
         </label>
         <label className="block text-sm">
-          Hue max ({settings.markerDetection.hueMax}°)
+          Green hue max ({settings.markerDetection.hueMax}°)
           <input
             type="range"
             min={0}
@@ -123,6 +126,28 @@ export function SettingsPanel() {
             value={settings.markerDetection.hueMax}
             onChange={(e) => updateMarkerDetection('hueMax', Number(e.target.value))}
             className="mt-2 w-full accent-emerald-400"
+          />
+        </label>
+        <label className="block text-sm">
+          Blue hue min ({settings.markerDetection.blueHueMin}°)
+          <input
+            type="range"
+            min={0}
+            max={360}
+            value={settings.markerDetection.blueHueMin}
+            onChange={(e) => updateMarkerDetection('blueHueMin', Number(e.target.value))}
+            className="mt-2 w-full accent-sky-400"
+          />
+        </label>
+        <label className="block text-sm">
+          Blue hue max ({settings.markerDetection.blueHueMax}°)
+          <input
+            type="range"
+            min={0}
+            max={360}
+            value={settings.markerDetection.blueHueMax}
+            onChange={(e) => updateMarkerDetection('blueHueMax', Number(e.target.value))}
+            className="mt-2 w-full accent-sky-400"
           />
         </label>
         <label className="block text-sm">

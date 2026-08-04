@@ -24,7 +24,7 @@ export function SavedPagesPanel({
   const sourceImageName = useAppStore((state) => state.editor.sourceImageName)
   const loadPageIntoEditor = useAppStore((state) => state.loadPageIntoEditor)
   const deletePage = useAppStore((state) => state.deletePage)
-  const renameCollage = useAppStore((state) => state.renameCollage)
+  const renamePage = useAppStore((state) => state.renamePage)
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -45,7 +45,7 @@ export function SavedPagesPanel({
   }
 
   const submitRename = (pageId: string) => {
-    renameCollage(pageId, renameValue)
+    renamePage(pageId, renameValue)
     cancelRename()
   }
 
@@ -94,7 +94,7 @@ export function SavedPagesPanel({
                     className="aspect-video w-full bg-black object-cover"
                   />
                 </button>
-                {renamingId === page.id && page.isCollage ? (
+                {renamingId === page.id ? (
                   <form
                     className="flex gap-0.5 p-1"
                     onSubmit={(event) => {
@@ -126,16 +126,14 @@ export function SavedPagesPanel({
                 ) : (
                   <div className="flex items-center gap-1 p-1">
                     <p className="min-w-0 flex-1 truncate text-[10px] text-zinc-400">{page.name}</p>
-                    {page.isCollage && (
-                      <button
-                        type="button"
-                        onClick={() => startRename(page.id, page.name)}
-                        className="text-[10px] text-zinc-500 hover:text-zinc-300"
-                        title="Rename"
-                      >
-                        ✎
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => startRename(page.id, page.name)}
+                      className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                      title="Rename"
+                    >
+                      ✎
+                    </button>
                     <button
                       type="button"
                       onClick={() => deletePage(page.id)}
@@ -229,7 +227,7 @@ export function SavedPagesPanel({
                       Open
                     </button>
                   )}
-                  {page.isCollage && !isRenaming && (
+                  {!isRenaming && (
                     <button
                       type="button"
                       onClick={() => startRename(page.id, page.name)}

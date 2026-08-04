@@ -17,9 +17,22 @@ export type MagnifierOverlay = {
   offsetY: number
 }
 
+/** Copied crop/marker zone (no id) for pasting onto another page. */
+export type OverlayClipboard = {
+  type: OverlayType
+  rect: MarkerRect
+  userScale: number
+  offsetX: number
+  offsetY: number
+}
+
 export type MarkerDetectionSettings = {
+  /** Green marker hue range (degrees). */
   hueMin: number
   hueMax: number
+  /** Blue marker hue range (degrees). */
+  blueHueMin: number
+  blueHueMax: number
   satMin: number
   lightMin: number
   lightMax: number
@@ -66,6 +79,12 @@ export type RenderPageOptions = {
   skipBackground?: boolean
   /** Checkerboard behind content when skipping background (UI previews only). */
   showPlaceholderBackground?: boolean
+  /** Visible document region; magnifier overlays still use the full source image. */
+  documentCropRect?: MarkerRect | null
+  /** Draw document content only (no magnifier overlays). */
+  omitOverlays?: boolean
+  /** Draw magnifier overlays only on transparency (no document). */
+  overlaysOnly?: boolean
 }
 
 export type Page = {
@@ -76,6 +95,7 @@ export type Page = {
   settings: AppSettings
   thumbnailDataUrl: string
   createdAt: number
+  documentCropRect?: MarkerRect | null
   isCollage?: boolean
   collagePanelPageIds?: string[]
   collageRenderOptions?: CollageRenderOptions
@@ -94,10 +114,16 @@ export type CollageRenderOptions = {
 export type EditorState = {
   sourceImageDataUrl: string | null
   sourceImageName: string
+  /** When set, Save updates this page instead of creating a new one. */
+  activePageId: string | null
   overlays: MagnifierOverlay[]
+  /** Selected marker/crop shown highlighted in the left panel. */
+  selectedOverlayId: string | null
+  documentCropRect: MarkerRect | null
   isDetecting: boolean
   detectionError: string | null
   isCropMode: boolean
+  isDocumentCropMode: boolean
 }
 
 export type TabId = 'editor' | 'gallery' | 'collage' | 'export' | 'settings'

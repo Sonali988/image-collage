@@ -33,17 +33,38 @@ function rgbToHsl(r: number, g: number, b: number) {
   return { h: h * 360, s, l }
 }
 
+function inHueRange(h: number, min: number, max: number) {
+  if (min <= max) return h >= min && h <= max
+  // Wrap-around ranges (e.g. 350–20)
+  return h >= min || h <= max
+}
+
 function isGreenMarker(pixel: Rgb, settings: MarkerDetectionSettings): boolean {
   const { h, s, l } = rgbToHsl(pixel.r, pixel.g, pixel.b)
   const greenDominant = pixel.g > pixel.r * 1.2 && pixel.g > pixel.b * 1.2
   return (
     greenDominant &&
-    h >= settings.hueMin &&
-    h <= settings.hueMax &&
+    inHueRange(h, settings.hueMin, settings.hueMax) &&
     s >= settings.satMin &&
     l >= settings.lightMin &&
     l <= settings.lightMax
   )
+}
+
+function isBlueMarker(pixel: Rgb, settings: MarkerDetectionSettings): boolean {
+  const { h, s, l } = rgbToHsl(pixel.r, pixel.g, pixel.b)
+  const blueDominant = pixel.b > pixel.r * 1.2 && pixel.b > pixel.g * 1.15
+  return (
+    blueDominant &&
+    inHueRange(h, settings.blueHueMin, settings.blueHueMax) &&
+    s >= settings.satMin &&
+    l >= settings.lightMin &&
+    l <= settings.lightMax
+  )
+}
+
+function isMarkerPixel(pixel: Rgb, settings: MarkerDetectionSettings): boolean {
+  return isGreenMarker(pixel, settings) || isBlueMarker(pixel, settings)
 }
 
 function findConnectedRegions(
@@ -115,7 +136,7 @@ function findConnectedRegions(
   return regions.sort((a, b) => a.y - b.y || a.x - b.x)
 }
 
-export function detectGreenMarkers(
+export function detectMarkers(
   image: HTMLImageElement,
   settings: MarkerDetectionSettings,
 ): MagnifierOverlay[] {
@@ -136,8 +157,8 @@ export function detectGreenMarkers(
   const mask = new Uint8Array(width * height)
 
   for (let i = 0; i < data.length; i += 4) {
-    const pixel = { r: data[i], g: data[i + 1], b: data[i + 2] }
-    mask[i / 4] = isGreenMarker(pixel, settings) ? 1 : 0
+    const pixel = { r: data[i]!, g: data[i + 1]!, b: data[i + 2]! }
+    mask[i / 4] = isMarkerPixel(pixel, settings) ? 1 : 0
   }
 
   const scaledMinArea = Math.max(25, Math.round(settings.minMarkerArea * scale * scale))
@@ -153,3 +174,6 @@ export function detectGreenMarkers(
     offsetY: 0,
   }))
 }
+
+/** @deprecated Use detectMarkers — detects green and blue markers. */
+export const detectGreenMarkers = detectMarkers

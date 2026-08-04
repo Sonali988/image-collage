@@ -51,6 +51,7 @@ export function normalizedRectFromCanvasDrag(
   imageWidth: number,
   imageHeight: number,
   settings: AppSettings,
+  _documentCropRect?: MarkerRect | null,
 ): MarkerRect | null {
   const p1 = canvasPointToNormalized(start.x, start.y, imageWidth, imageHeight, settings)
   const p2 = canvasPointToNormalized(end.x, end.y, imageWidth, imageHeight, settings)

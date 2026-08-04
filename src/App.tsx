@@ -23,7 +23,7 @@ function App() {
     <div className="flex h-screen flex-col overflow-hidden bg-[#0f0f14]">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800/80 px-3 py-2">
         <h1 className="text-sm font-semibold tracking-tight text-zinc-100">
-          Collage Studio
+          Testimonies Report
         </h1>
         <nav className="flex flex-wrap justify-end gap-1">
           {tabs.map((tab) => (

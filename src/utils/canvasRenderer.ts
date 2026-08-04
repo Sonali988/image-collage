@@ -2,6 +2,7 @@ import type {
   AppSettings,
   CollageRenderOptions,
   MagnifierOverlay,
+  MarkerRect,
   Page,
   RenderPageOptions,
 } from '../types'
@@ -25,7 +26,8 @@ export function getContentPlacement(
 ): ContentPlacement {
   const contentX = (settings.backgroundWidth - settings.contentWidth) / 2
   const contentY = (settings.backgroundHeight - settings.contentHeight) / 2
-  const scale = Math.max(
+  // Fit entire document inside the content area (contain) — never auto-crop.
+  const scale = Math.min(
     settings.contentWidth / imageWidth,
     settings.contentHeight / imageHeight,
   )
@@ -88,12 +90,31 @@ export function mergeBackgroundSettings(pageSettings: AppSettings, globalSetting
 function drawBlurredContent(
   ctx: CanvasRenderingContext2D,
   sourceImage: HTMLImageElement,
-  placement: ContentPlacement,
+  settings: AppSettings,
   blurAmount: number,
+  documentCropRect?: MarkerRect | null,
 ) {
+  let srcX = 0
+  let srcY = 0
+  let srcW = sourceImage.naturalWidth
+  let srcH = sourceImage.naturalHeight
+
+  if (documentCropRect) {
+    srcX = documentCropRect.x * sourceImage.naturalWidth
+    srcY = documentCropRect.y * sourceImage.naturalHeight
+    srcW = documentCropRect.w * sourceImage.naturalWidth
+    srcH = documentCropRect.h * sourceImage.naturalHeight
+  }
+
+  const placement = getContentPlacement(srcW, srcH, settings)
+
   if (blurAmount <= 0) {
     ctx.drawImage(
       sourceImage,
+      srcX,
+      srcY,
+      srcW,
+      srcH,
       placement.drawX,
       placement.drawY,
       placement.drawW,
@@ -103,13 +124,13 @@ function drawBlurredContent(
   }
 
   const temp = document.createElement('canvas')
-  temp.width = placement.drawW
-  temp.height = placement.drawH
+  temp.width = Math.max(1, Math.round(placement.drawW))
+  temp.height = Math.max(1, Math.round(placement.drawH))
   const tempCtx = temp.getContext('2d')
   if (!tempCtx) return
 
   tempCtx.filter = `blur(${blurAmount}px)`
-  tempCtx.drawImage(sourceImage, 0, 0, placement.drawW, placement.drawH)
+  tempCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, 0, 0, temp.width, temp.height)
   ctx.drawImage(temp, placement.drawX, placement.drawY, placement.drawW, placement.drawH)
 }
 
@@ -207,8 +228,8 @@ export async function renderPageToCanvas(
 
   const sourceImage = await loadImage(sourceImageDataUrl)
 
-  if (renderOptions.skipBackground) {
-    if (renderOptions.showPlaceholderBackground) {
+  if (renderOptions.skipBackground || renderOptions.overlaysOnly) {
+    if (renderOptions.showPlaceholderBackground && !renderOptions.overlaysOnly) {
       drawPlaceholderBackground(ctx, settings)
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -220,22 +241,33 @@ export async function renderPageToCanvas(
     drawBackground(ctx, settings, bgImage)
   }
 
+  const documentCropRect = renderOptions.documentCropRect ?? null
   const placement = getContentPlacement(
     sourceImage.naturalWidth,
     sourceImage.naturalHeight,
     settings,
   )
 
-  const contentBounds = getContentBounds(settings)
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(contentBounds.x, contentBounds.y, contentBounds.width, contentBounds.height)
-  ctx.clip()
-  drawBlurredContent(ctx, sourceImage, placement, settings.blurAmount)
-  ctx.restore()
+  if (!renderOptions.overlaysOnly) {
+    const contentBounds = getContentBounds(settings)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(contentBounds.x, contentBounds.y, contentBounds.width, contentBounds.height)
+    ctx.clip()
+    drawBlurredContent(
+      ctx,
+      sourceImage,
+      settings,
+      settings.blurAmount,
+      documentCropRect,
+    )
+    ctx.restore()
+  }
 
-  for (const overlay of overlays) {
-    drawMagnifiedOverlay(ctx, sourceImage, overlay, placement, settings)
+  if (!renderOptions.omitOverlays) {
+    for (const overlay of overlays) {
+      drawMagnifiedOverlay(ctx, sourceImage, overlay, placement, settings)
+    }
   }
 }
 
@@ -260,6 +292,20 @@ export async function renderCollagePanelDataUrls(pages: Page[]): Promise<string[
     pages.map((page) =>
       renderPageToDataUrl(page.settings, page.sourceImageDataUrl, page.overlays, 'image/png', undefined, {
         skipBackground: true,
+        omitOverlays: true,
+        documentCropRect: page.documentCropRect ?? null,
+      }),
+    ),
+  )
+}
+
+async function renderCollageOverlayDataUrls(pages: Page[]): Promise<string[]> {
+  return Promise.all(
+    pages.map((page) =>
+      renderPageToDataUrl(page.settings, page.sourceImageDataUrl, page.overlays, 'image/png', undefined, {
+        skipBackground: true,
+        overlaysOnly: true,
+        documentCropRect: page.documentCropRect ?? null,
       }),
     ),
   )
@@ -270,8 +316,11 @@ export async function renderCollageFromPages(
   backgroundSettings: AppSettings,
   options: CollageRenderOptions = { titles: [] },
 ): Promise<string> {
-  const panelDataUrls = await renderCollagePanelDataUrls(panelPages)
-  return renderCollageToDataUrl(panelDataUrls, backgroundSettings, options)
+  const [panelDataUrls, overlayDataUrls] = await Promise.all([
+    renderCollagePanelDataUrls(panelPages),
+    renderCollageOverlayDataUrls(panelPages),
+  ])
+  return renderCollageToDataUrl(panelDataUrls, backgroundSettings, options, overlayDataUrls)
 }
 
 function drawCollageSlotTitle(
@@ -294,9 +343,9 @@ function drawCollageSlotTitle(
   ctx.restore()
 }
 
-function drawCollageSlotImage(
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+function getCollageSlotDrawRect(
+  imageWidth: number,
+  imageHeight: number,
   slotX: number,
   slotY: number,
   slotW: number,
@@ -310,20 +359,56 @@ function drawCollageSlotImage(
   const contentW = slotW - padding * 2
   const contentH = slotH - titleHeight - padding
 
-  if (contentW <= 0 || contentH <= 0) return
+  if (contentW <= 0 || contentH <= 0 || imageHeight <= 0) {
+    return null
+  }
 
   const drawH = contentH * imageScale
-  const scale = drawH / image.naturalHeight
-  const drawW = image.naturalWidth * scale
+  const scale = drawH / imageHeight
+  const drawW = imageWidth * scale
   const drawX = contentX + (contentW - drawW) / 2
   const drawY = contentY + (contentH - drawH) / 2
 
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(contentX, contentY, contentW, contentH)
-  ctx.clip()
-  ctx.drawImage(image, drawX, drawY, drawW, drawH)
-  ctx.restore()
+  return { contentX, contentY, contentW, contentH, drawX, drawY, drawW, drawH }
+}
+
+function drawCollageSlotImage(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  slotX: number,
+  slotY: number,
+  slotW: number,
+  slotH: number,
+  titleHeight: number,
+  padding: number,
+  imageScale = 1,
+  clipToSlot = true,
+) {
+  const draw = getCollageSlotDrawRect(
+    image.naturalWidth,
+    image.naturalHeight,
+    slotX,
+    slotY,
+    slotW,
+    slotH,
+    titleHeight,
+    padding,
+    imageScale,
+  )
+  if (!draw) return
+
+  if (clipToSlot) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(draw.contentX, draw.contentY, draw.contentW, draw.contentH)
+    ctx.clip()
+    ctx.drawImage(image, draw.drawX, draw.drawY, draw.drawW, draw.drawH)
+    ctx.restore()
+    return
+  }
+
+  // Magnifier overlays may intentionally overflow into neighboring panels.
+  ctx.drawImage(image, draw.drawX, draw.drawY, draw.drawW, draw.drawH)
 }
 
 
@@ -331,8 +416,10 @@ export async function renderCollageToDataUrl(
   pageDataUrls: string[],
   settings: AppSettings,
   options: CollageRenderOptions = { titles: [] },
+  overlayDataUrls: string[] = [],
 ): Promise<string> {
   const images = await Promise.all(pageDataUrls.map(loadImage))
+  const overlayImages = await Promise.all(overlayDataUrls.map(loadImage))
   const canvas = document.createElement('canvas')
   canvas.width = settings.backgroundWidth
   canvas.height = settings.backgroundHeight
@@ -359,6 +446,7 @@ export async function renderCollageToDataUrl(
 
   const slots = getCollageSlots(images.length)
 
+  // Pass 1: documents stay clipped inside their slots.
   images.forEach((image, index) => {
     const slot = slots[index]
     if (!slot) return
@@ -383,9 +471,34 @@ export async function renderCollageToDataUrl(
       titleHeight,
       slotPadding,
       imageScale,
+      true,
     )
   })
 
+  // Pass 2: crops/markers on top, unclipped so they can overlap neighbors.
+  overlayImages.forEach((image, index) => {
+    const slot = slots[index]
+    if (!slot) return
+
+    const slotX = slot.x * canvas.width
+    const slotY = slot.y * canvas.height
+    const slotW = slot.w * canvas.width
+    const slotH = slot.h * canvas.height
+    const imageScale = options.imageScales?.[index] ?? 1
+
+    drawCollageSlotImage(
+      ctx,
+      image,
+      slotX,
+      slotY,
+      slotW,
+      slotH,
+      titleHeight,
+      slotPadding,
+      imageScale,
+      false,
+    )
+  })
 
   return canvas.toDataURL('image/png')
 }
