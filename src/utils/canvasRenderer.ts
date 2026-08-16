@@ -107,8 +107,9 @@ function drawBlurredContent(
   }
 
   const placement = getContentPlacement(srcW, srcH, settings)
+  const blurPx = Math.max(0, Number(blurAmount) || 0)
 
-  if (blurAmount <= 0) {
+  if (blurPx <= 0) {
     ctx.drawImage(
       sourceImage,
       srcX,
@@ -123,15 +124,39 @@ function drawBlurredContent(
     return
   }
 
-  const temp = document.createElement('canvas')
-  temp.width = Math.max(1, Math.round(placement.drawW))
-  temp.height = Math.max(1, Math.round(placement.drawH))
-  const tempCtx = temp.getContext('2d')
-  if (!tempCtx) return
+  const destW = Math.max(1, Math.round(placement.drawW))
+  const destH = Math.max(1, Math.round(placement.drawH))
+  const pad = Math.ceil(blurPx * 3)
 
-  tempCtx.filter = `blur(${blurAmount}px)`
-  tempCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, 0, 0, temp.width, temp.height)
-  ctx.drawImage(temp, placement.drawX, placement.drawY, placement.drawW, placement.drawH)
+  const sourceCanvas = document.createElement('canvas')
+  sourceCanvas.width = destW + pad * 2
+  sourceCanvas.height = destH + pad * 2
+  const sourceCtx = sourceCanvas.getContext('2d')
+  if (!sourceCtx) return
+
+  sourceCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, pad, pad, destW, destH)
+
+  const blurredCanvas = document.createElement('canvas')
+  blurredCanvas.width = sourceCanvas.width
+  blurredCanvas.height = sourceCanvas.height
+  const blurredCtx = blurredCanvas.getContext('2d')
+  if (!blurredCtx) return
+
+  blurredCtx.filter = `blur(${blurPx}px)`
+  blurredCtx.drawImage(sourceCanvas, 0, 0)
+  blurredCtx.filter = 'none'
+
+  ctx.drawImage(
+    blurredCanvas,
+    pad,
+    pad,
+    destW,
+    destH,
+    placement.drawX,
+    placement.drawY,
+    placement.drawW,
+    placement.drawH,
+  )
 }
 
 function drawMagnifiedOverlay(
@@ -227,6 +252,7 @@ export async function renderPageToCanvas(
   canvas.height = settings.backgroundHeight
 
   const sourceImage = await loadImage(sourceImageDataUrl)
+  if (renderOptions.shouldContinue && !renderOptions.shouldContinue()) return
 
   if (renderOptions.skipBackground || renderOptions.overlaysOnly) {
     if (renderOptions.showPlaceholderBackground && !renderOptions.overlaysOnly) {

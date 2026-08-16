@@ -118,11 +118,18 @@ export function CanvasPreview({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || !sourceImageDataUrl) return
+
+    let alive = true
     void renderPageToCanvas(canvas, settings, sourceImageDataUrl, overlays, {
       skipBackground: true,
       showPlaceholderBackground: true,
       documentCropRect,
+      shouldContinue: () => alive,
     })
+
+    return () => {
+      alive = false
+    }
   }, [settings, sourceImageDataUrl, overlays, documentCropRect])
 
   useEffect(() => {
