@@ -84,6 +84,16 @@ function normalizeSettings(settings: AppSettings): AppSettings {
     normalized.overlaySharpness = Math.max(0, Math.min(2, normalized.overlaySharpness))
   }
 
+  if (
+    normalized.blurAmount === undefined ||
+    normalized.blurAmount === null ||
+    Number.isNaN(Number(normalized.blurAmount))
+  ) {
+    normalized.blurAmount = DEFAULTS.blurAmount
+  } else {
+    normalized.blurAmount = Math.max(0, Math.min(20, Number(normalized.blurAmount)))
+  }
+
   if (!normalized.overlayTintColor) {
     normalized.overlayTintColor = OVERLAY_TINT_COLORS[normalized.overlayTintPreset]
   } else if (

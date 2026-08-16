@@ -85,6 +85,8 @@ export type RenderPageOptions = {
   omitOverlays?: boolean
   /** Draw magnifier overlays only on transparency (no document). */
   overlaysOnly?: boolean
+  /** Return false to abort rendering after async loads (e.g. stale preview). */
+  shouldContinue?: () => boolean
 }
 
 export type Page = {
