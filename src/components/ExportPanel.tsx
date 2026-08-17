@@ -11,8 +11,11 @@ import { ExportPagePreview } from './ExportPagePreview'
 export function ExportPanel() {
   const pages = useAppStore((state) => state.pages)
   const settings = useAppStore((state) => state.settings)
+  const renamePage = useAppStore((state) => state.renamePage)
   const [isExporting, setIsExporting] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
 
   const selectedCount = selectedIds.length
   const allSelected = pages.length > 0 && selectedCount === pages.length
@@ -34,6 +37,21 @@ export function ExportPanel() {
 
   const toggleSelectAll = () => {
     setSelectedIds(allSelected ? [] : pages.map((page) => page.id))
+  }
+
+  const startRename = (pageId: string, currentName: string) => {
+    setRenamingId(pageId)
+    setRenameValue(currentName)
+  }
+
+  const cancelRename = () => {
+    setRenamingId(null)
+    setRenameValue('')
+  }
+
+  const submitRename = (pageId: string) => {
+    renamePage(pageId, renameValue)
+    cancelRename()
   }
 
   if (pages.length === 0) {
@@ -121,21 +139,63 @@ export function ExportPanel() {
                   ✓
                 </span>
               </button>
-              <div className="flex items-center justify-between gap-2 p-4">
-                <div>
-                  <h3 className="font-medium">{page.name}</h3>
-                  <p className="text-xs text-zinc-500">
-                    {page.isCollage ? 'Collage' : 'Page'}
-                  </p>
+              <div className="space-y-2 p-4">
+                {renamingId === page.id ? (
+                  <form
+                    className="flex gap-1"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      submitRename(page.id)
+                    }}
+                  >
+                    <input
+                      type="text"
+                      value={renameValue}
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      autoFocus
+                      className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm text-zinc-200"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-600"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelRename}
+                      className="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700"
+                    >
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <div>
+                    <h3 className="font-medium">{page.name}</h3>
+                    <p className="text-xs text-zinc-500">
+                      {page.isCollage ? 'Collage' : 'Page'}
+                    </p>
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2">
+                  {renamingId !== page.id && (
+                    <button
+                      type="button"
+                      onClick={() => startRename(page.id, page.name)}
+                      className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700"
+                    >
+                      Rename
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    disabled={isExporting}
+                    onClick={() => void runExport(() => downloadPagePng(page, settings, pages))}
+                    className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs enabled:hover:bg-zinc-700 disabled:opacity-40"
+                  >
+                    PNG
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={isExporting}
-                  onClick={() => void runExport(() => downloadPagePng(page, settings, pages))}
-                  className="rounded-lg bg-zinc-800 px-3 py-1.5 text-xs enabled:hover:bg-zinc-700 disabled:opacity-40"
-                >
-                  PNG
-                </button>
               </div>
             </article>
           )
