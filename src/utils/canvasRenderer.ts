@@ -9,6 +9,7 @@ import type {
 import { COLLAGE_TITLE_HEIGHT_RATIO, getCollageSlots } from '../config/collage'
 import { applyOverlayTintOpacity, DEFAULT_OVERLAY_TINT_OPACITY, isTransparentOverlayTint } from '../config/overlayTintColors'
 import { enhanceOverlayPatch } from './imageEnhance'
+import { blurCanvas } from './canvasBlur'
 import { loadImage } from './imageLoader'
 
 export type ContentPlacement = {
@@ -136,15 +137,7 @@ function drawBlurredContent(
 
   sourceCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, pad, pad, destW, destH)
 
-  const blurredCanvas = document.createElement('canvas')
-  blurredCanvas.width = sourceCanvas.width
-  blurredCanvas.height = sourceCanvas.height
-  const blurredCtx = blurredCanvas.getContext('2d')
-  if (!blurredCtx) return
-
-  blurredCtx.filter = `blur(${blurPx}px)`
-  blurredCtx.drawImage(sourceCanvas, 0, 0)
-  blurredCtx.filter = 'none'
+  const blurredCanvas = blurCanvas(sourceCanvas, blurPx)
 
   ctx.drawImage(
     blurredCanvas,
