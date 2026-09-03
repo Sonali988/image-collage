@@ -63,6 +63,7 @@ export function CanvasPreview({
   const sourceImageDataUrl = useAppStore((state) => state.editor.sourceImageDataUrl)
   const overlays = useAppStore((state) => state.editor.overlays)
   const documentCropRect = useAppStore((state) => state.editor.documentCropRect)
+  const documentScale = useAppStore((state) => state.editor.documentScale)
   const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const isDocumentCropMode = useAppStore((state) => state.editor.isDocumentCropMode)
   const setCropMode = useAppStore((state) => state.setCropMode)
@@ -124,13 +125,14 @@ export function CanvasPreview({
       skipBackground: true,
       showPlaceholderBackground: true,
       documentCropRect,
+      documentScale,
       shouldContinue: () => alive,
     })
 
     return () => {
       alive = false
     }
-  }, [settings, sourceImageDataUrl, overlays, documentCropRect])
+  }, [settings, sourceImageDataUrl, overlays, documentCropRect, documentScale])
 
   useEffect(() => {
     if (!isSelecting) setDrag(null)
@@ -168,8 +170,9 @@ export function CanvasPreview({
         imageSize.height,
         settings,
         documentCropRect,
+        documentScale,
       ),
-    [overlays, imageSize.width, imageSize.height, settings, documentCropRect],
+    [overlays, imageSize.width, imageSize.height, settings, documentCropRect, documentScale],
   )
 
   const finishSelectionDrag = useCallback(
@@ -184,6 +187,7 @@ export function CanvasPreview({
         imageSize.height,
         settings,
         documentCropRect,
+        documentScale,
       )
 
       if (!rect) {
@@ -203,6 +207,7 @@ export function CanvasPreview({
       addCropOverlay,
       cropDocument,
       documentCropRect,
+      documentScale,
       imageSize.height,
       imageSize.width,
       isCropMode,
@@ -234,11 +239,13 @@ export function CanvasPreview({
         imageSize.height,
         settings,
         documentCropRect,
+        documentScale,
       )
       updateOverlayRect(dragState.overlayId, nextRect)
     },
     [
       documentCropRect,
+      documentScale,
       imageSize.height,
       imageSize.width,
       settings,

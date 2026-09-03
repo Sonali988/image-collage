@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { DEFAULTS, withExportCanvasSize } from '../config/defaults'
+import { DEFAULTS, withExportCanvasSize, clampDocumentScale } from '../config/defaults'
 import { OVERLAY_TINT_COLORS } from '../config/overlayTintColors'
 import type {
   AppSettings,
@@ -171,6 +171,7 @@ function normalizePage(page: Page): Page {
     ...page,
     overlays: page.overlays.map(normalizeOverlay),
     settings: normalizeSettings(page.settings),
+    documentScale: clampDocumentScale(page.documentScale),
   }
 }
 
@@ -207,6 +208,7 @@ type AppState = {
   setDocumentCropMode: (enabled: boolean) => void
   cropDocument: (rect: MarkerRect) => void
   clearDocumentCrop: () => void
+  setDocumentScale: (scale: number) => void
   addCropOverlay: (rect: MarkerRect) => void
   updateOverlayRect: (id: string, rect: MarkerRect) => void
   updateOverlayScale: (id: string, userScale: number) => void
@@ -236,6 +238,7 @@ const initialEditor: EditorState = {
   overlays: [],
   selectedOverlayId: null,
   documentCropRect: null,
+  documentScale: 1,
   isDetecting: false,
   detectionError: null,
   isCropMode: false,
@@ -317,6 +320,7 @@ export const useAppStore = create<AppState>()(
             overlays: [],
             selectedOverlayId: null,
             documentCropRect: null,
+            documentScale: 1,
             isDetecting: true,
             detectionError: null,
             isCropMode: false,
@@ -503,6 +507,11 @@ export const useAppStore = create<AppState>()(
           editor: { ...state.editor, documentCropRect: null },
         })),
 
+      setDocumentScale: (scale) =>
+        set((state) => ({
+          editor: { ...state.editor, documentScale: clampDocumentScale(scale) },
+        })),
+
       addCropOverlay: (rect) =>
         set((state) => {
           const label = nextCropLabel(state.editor.overlays)
@@ -654,6 +663,7 @@ export const useAppStore = create<AppState>()(
             skipBackground: true,
             showPlaceholderBackground: true,
             documentCropRect: editor.documentCropRect,
+            documentScale: editor.documentScale,
           },
         )
 
@@ -675,6 +685,7 @@ export const useAppStore = create<AppState>()(
             overlays: editor.overlays,
             settings: { ...settings },
             documentCropRect: editor.documentCropRect,
+            documentScale: editor.documentScale,
             thumbnailDataUrl,
           }
 
@@ -701,6 +712,7 @@ export const useAppStore = create<AppState>()(
           overlays: editor.overlays,
           settings: { ...settings },
           documentCropRect: editor.documentCropRect,
+          documentScale: editor.documentScale,
           thumbnailDataUrl,
           createdAt: Date.now(),
         }
@@ -766,6 +778,7 @@ export const useAppStore = create<AppState>()(
             overlays: page.overlays.map(normalizeOverlay),
             selectedOverlayId: null,
             documentCropRect: page.documentCropRect ?? null,
+            documentScale: clampDocumentScale(page.documentScale),
             isDetecting: false,
             detectionError: null,
             isCropMode: false,

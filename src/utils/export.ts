@@ -39,7 +39,7 @@ export async function renderPageForExport(page: Page, globalSettings: AppSetting
     page.overlays,
     'image/png',
     undefined,
-    { documentCropRect: page.documentCropRect ?? null },
+    { documentCropRect: page.documentCropRect ?? null, documentScale: page.documentScale ?? 1 },
   )
 }
 
