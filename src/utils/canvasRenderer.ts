@@ -24,14 +24,34 @@ export function getContentPlacement(
   imageWidth: number,
   imageHeight: number,
   settings: AppSettings,
+  documentScale = 1,
 ): ContentPlacement {
   const contentX = (settings.backgroundWidth - settings.contentWidth) / 2
   const contentY = (settings.backgroundHeight - settings.contentHeight) / 2
-  // Fit entire document inside the content area (contain) — never auto-crop.
-  const scale = Math.min(
+  if (imageWidth <= 0 || imageHeight <= 0) {
+    return {
+      drawX: contentX,
+      drawY: contentY,
+      drawW: settings.contentWidth,
+      drawH: settings.contentHeight,
+      scale: 1,
+    }
+  }
+
+  const fit = Math.min(
     settings.contentWidth / imageWidth,
     settings.contentHeight / imageHeight,
   )
+  const baseW = imageWidth * fit
+  const baseH = imageHeight * fit
+  // Grow into the full canvas; never scale past the export frame.
+  const maxZoom = Math.max(
+    1,
+    Math.min(settings.backgroundWidth / baseW, settings.backgroundHeight / baseH),
+  )
+  const requested = Number.isFinite(documentScale) && documentScale > 0 ? documentScale : 1
+  const zoom = Math.min(requested, maxZoom)
+  const scale = fit * zoom
   const drawW = imageWidth * scale
   const drawH = imageHeight * scale
 
@@ -41,15 +61,6 @@ export function getContentPlacement(
     drawW,
     drawH,
     scale,
-  }
-}
-
-export function getContentBounds(settings: AppSettings) {
-  return {
-    x: (settings.backgroundWidth - settings.contentWidth) / 2,
-    y: (settings.backgroundHeight - settings.contentHeight) / 2,
-    width: settings.contentWidth,
-    height: settings.contentHeight,
   }
 }
 
@@ -88,35 +99,26 @@ export function mergeBackgroundSettings(pageSettings: AppSettings, globalSetting
   }
 }
 
+function visibleCropRect(placement: ContentPlacement, documentCropRect: MarkerRect) {
+  return {
+    x: placement.drawX + documentCropRect.x * placement.drawW,
+    y: placement.drawY + documentCropRect.y * placement.drawH,
+    w: documentCropRect.w * placement.drawW,
+    h: documentCropRect.h * placement.drawH,
+  }
+}
+
 function drawBlurredContent(
   ctx: CanvasRenderingContext2D,
   sourceImage: HTMLImageElement,
-  settings: AppSettings,
+  placement: ContentPlacement,
   blurAmount: number,
-  documentCropRect?: MarkerRect | null,
 ) {
-  let srcX = 0
-  let srcY = 0
-  let srcW = sourceImage.naturalWidth
-  let srcH = sourceImage.naturalHeight
-
-  if (documentCropRect) {
-    srcX = documentCropRect.x * sourceImage.naturalWidth
-    srcY = documentCropRect.y * sourceImage.naturalHeight
-    srcW = documentCropRect.w * sourceImage.naturalWidth
-    srcH = documentCropRect.h * sourceImage.naturalHeight
-  }
-
-  const placement = getContentPlacement(srcW, srcH, settings)
   const blurPx = Math.max(0, Number(blurAmount) || 0)
 
   if (blurPx <= 0) {
     ctx.drawImage(
       sourceImage,
-      srcX,
-      srcY,
-      srcW,
-      srcH,
       placement.drawX,
       placement.drawY,
       placement.drawW,
@@ -135,7 +137,7 @@ function drawBlurredContent(
   const sourceCtx = sourceCanvas.getContext('2d')
   if (!sourceCtx) return
 
-  sourceCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, pad, pad, destW, destH)
+  sourceCtx.drawImage(sourceImage, pad, pad, destW, destH)
 
   const blurredCanvas = blurCanvas(sourceCanvas, blurPx)
 
@@ -261,26 +263,26 @@ export async function renderPageToCanvas(
   }
 
   const documentCropRect = renderOptions.documentCropRect ?? null
+  const documentScale = renderOptions.documentScale ?? 1
   const placement = getContentPlacement(
     sourceImage.naturalWidth,
     sourceImage.naturalHeight,
     settings,
+    documentScale,
   )
 
   if (!renderOptions.overlaysOnly) {
-    const contentBounds = getContentBounds(settings)
-    ctx.save()
-    ctx.beginPath()
-    ctx.rect(contentBounds.x, contentBounds.y, contentBounds.width, contentBounds.height)
-    ctx.clip()
-    drawBlurredContent(
-      ctx,
-      sourceImage,
-      settings,
-      settings.blurAmount,
-      documentCropRect,
-    )
-    ctx.restore()
+    if (documentCropRect) {
+      const cropDest = visibleCropRect(placement, documentCropRect)
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(cropDest.x, cropDest.y, cropDest.w, cropDest.h)
+      ctx.clip()
+      drawBlurredContent(ctx, sourceImage, placement, settings.blurAmount)
+      ctx.restore()
+    } else {
+      drawBlurredContent(ctx, sourceImage, placement, settings.blurAmount)
+    }
   }
 
   if (!renderOptions.omitOverlays) {
@@ -313,6 +315,7 @@ export async function renderCollagePanelDataUrls(pages: Page[]): Promise<string[
         skipBackground: true,
         omitOverlays: true,
         documentCropRect: page.documentCropRect ?? null,
+        documentScale: page.documentScale ?? 1,
       }),
     ),
   )
@@ -325,6 +328,7 @@ async function renderCollageOverlayDataUrls(pages: Page[]): Promise<string[]> {
         skipBackground: true,
         overlaysOnly: true,
         documentCropRect: page.documentCropRect ?? null,
+        documentScale: page.documentScale ?? 1,
       }),
     ),
   )

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { MAX_DOCUMENT_SCALE, MIN_DOCUMENT_SCALE } from '../config/defaults'
 import { useAppStore } from '../store/useAppStore'
 import { CanvasPreview } from './CanvasPreview'
 import { OverlayControls } from './OverlayControls'
@@ -13,6 +14,7 @@ export function ImageEditor() {
   const activePageId = useAppStore((state) => state.editor.activePageId)
   const isDocumentCropMode = useAppStore((state) => state.editor.isDocumentCropMode)
   const documentCropRect = useAppStore((state) => state.editor.documentCropRect)
+  const documentScale = useAppStore((state) => state.editor.documentScale)
   const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const settings = useAppStore((state) => state.settings)
   const updateSettings = useAppStore((state) => state.updateSettings)
@@ -21,6 +23,7 @@ export function ImageEditor() {
   const saveCurrentPage = useAppStore((state) => state.saveCurrentPage)
   const setDocumentCropMode = useAppStore((state) => state.setDocumentCropMode)
   const clearDocumentCrop = useAppStore((state) => state.clearDocumentCrop)
+  const setDocumentScale = useAppStore((state) => state.setDocumentScale)
   const copySelectedOverlay = useAppStore((state) => state.copySelectedOverlay)
   const pasteCopiedOverlay = useAppStore((state) => state.pasteCopiedOverlay)
   const isDetecting = useAppStore((state) => state.editor.isDetecting)
@@ -166,8 +169,20 @@ export function ImageEditor() {
                   Reset document crop
                 </button>
               )}
+              <label className="block text-[10px] text-zinc-500">
+                Document zoom {documentScale.toFixed(2)}×
+                <input
+                  type="range"
+                  min={MIN_DOCUMENT_SCALE}
+                  max={MAX_DOCUMENT_SCALE}
+                  step={0.05}
+                  value={documentScale}
+                  onChange={(event) => setDocumentScale(Number(event.target.value))}
+                  className="mt-1 w-full accent-rose-400"
+                />
+              </label>
               <p className="text-[10px] leading-snug text-zinc-500">
-                Rotate or crop the document. Markers are re-detected after rotate.
+                Zoom scales the whole page. Use Crop document to hide edges.
               </p>
             </div>
           )}

@@ -87,6 +87,8 @@ export type RenderPageOptions = {
   overlaysOnly?: boolean
   /** Return false to abort rendering after async loads (e.g. stale preview). */
   shouldContinue?: () => boolean
+  /** Extra contain-fit zoom for the document (1 = fit). */
+  documentScale?: number
 }
 
 export type Page = {
@@ -98,6 +100,8 @@ export type Page = {
   thumbnailDataUrl: string
   createdAt: number
   documentCropRect?: MarkerRect | null
+  /** Extra contain-fit zoom for the document (1 = fit, >1 zooms in). */
+  documentScale?: number
   isCollage?: boolean
   collagePanelPageIds?: string[]
   collageRenderOptions?: CollageRenderOptions
@@ -122,6 +126,8 @@ export type EditorState = {
   /** Selected marker/crop shown highlighted in the left panel. */
   selectedOverlayId: string | null
   documentCropRect: MarkerRect | null
+  /** Extra contain-fit zoom; 1 shows the whole document. */
+  documentScale: number
   isDetecting: boolean
   detectionError: string | null
   isCropMode: boolean

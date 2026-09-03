@@ -30,6 +30,16 @@ export const DEFAULTS: AppSettings = {
   },
 }
 
+export const MIN_DOCUMENT_SCALE = 0.5
+export const MAX_DOCUMENT_SCALE = 2.5
+export const DEFAULT_DOCUMENT_SCALE = 1
+
+export function clampDocumentScale(value: number | undefined): number {
+  const scale = Number(value)
+  if (!Number.isFinite(scale)) return DEFAULT_DOCUMENT_SCALE
+  return Math.max(MIN_DOCUMENT_SCALE, Math.min(MAX_DOCUMENT_SCALE, scale))
+}
+
 /** Keep canvas/export size locked to the fixed defaults. */
 export function withExportCanvasSize(settings: AppSettings): AppSettings {
   return {
