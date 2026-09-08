@@ -46,7 +46,8 @@ export function ImageEditor() {
       if (!mod) return
 
       if (event.key === 'c') {
-        if (copySelectedOverlay()) event.preventDefault()
+        event.preventDefault()
+        void copySelectedOverlay()
         return
       }
       if (event.key === 'v') {

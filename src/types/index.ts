@@ -15,6 +15,10 @@ export type MagnifierOverlay = {
   userScale: number
   offsetX: number
   offsetY: number
+  /** Pixels copied from another document; drawn instead of sampling this page. */
+  patchImageDataUrl?: string | null
+  /** Visible region of a pasted patch (normalized 0–1). */
+  patchCropRect?: MarkerRect | null
 }
 
 /** Copied crop/marker zone (no id) for pasting onto another page. */
@@ -24,6 +28,7 @@ export type OverlayClipboard = {
   userScale: number
   offsetX: number
   offsetY: number
+  patchImageDataUrl?: string | null
 }
 
 export type MarkerDetectionSettings = {
@@ -132,6 +137,7 @@ export type EditorState = {
   detectionError: string | null
   isCropMode: boolean
   isDocumentCropMode: boolean
+  isPatchCropMode: boolean
 }
 
 export type TabId = 'editor' | 'gallery' | 'collage' | 'export' | 'settings'

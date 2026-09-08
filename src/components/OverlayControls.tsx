@@ -10,6 +10,7 @@ function OverlayCard({
   selected,
   onSelect,
   onCopy,
+  canCropPatch,
 }: {
   overlay: MagnifierOverlay
   maxOffsetX: number
@@ -18,12 +19,16 @@ function OverlayCard({
   selected: boolean
   onSelect: () => void
   onCopy?: () => void
+  canCropPatch?: boolean
 }) {
   const cardRef = useRef<HTMLDivElement>(null)
   const updateOverlayScale = useAppStore((state) => state.updateOverlayScale)
   const updateOverlayOffset = useAppStore((state) => state.updateOverlayOffset)
   const updateOverlayRect = useAppStore((state) => state.updateOverlayRect)
   const removeOverlay = useAppStore((state) => state.removeOverlay)
+  const setPatchCropMode = useAppStore((state) => state.setPatchCropMode)
+  const clearPastedOverlayCrop = useAppStore((state) => state.clearPastedOverlayCrop)
+  const isPatchCropMode = useAppStore((state) => state.editor.isPatchCropMode)
 
   useEffect(() => {
     if (!selected || !cardRef.current) return
@@ -81,6 +86,34 @@ function OverlayCard({
 
       {selected && (
         <p className="mb-1.5 text-[10px] text-rose-300/80">Selected · adjust below</p>
+      )}
+
+      {canCropPatch && selected && (
+        <div className="mb-1.5 flex gap-1">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onSelect()
+              setPatchCropMode(true)
+            }}
+            className="flex-1 rounded bg-amber-700 px-2 py-1 text-[10px] text-white hover:bg-amber-600"
+          >
+            {isPatchCropMode ? 'Drag on zone…' : 'Crop pasted image'}
+          </button>
+          {overlay.patchCropRect && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                clearPastedOverlayCrop(overlay.id)
+              }}
+              className="rounded bg-zinc-800 px-2 py-1 text-[10px] hover:bg-zinc-700"
+            >
+              Reset crop
+            </button>
+          )}
+        </div>
       )}
 
       {showRectSliders && (
@@ -193,11 +226,14 @@ export function OverlayControls() {
   const isDetecting = useAppStore((state) => state.editor.isDetecting)
   const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const isDocumentCropMode = useAppStore((state) => state.editor.isDocumentCropMode)
+  const isPatchCropMode = useAppStore((state) => state.editor.isPatchCropMode)
   const detectionError = useAppStore((state) => state.editor.detectionError)
   const resetOverlayAdjustments = useAppStore((state) => state.resetOverlayAdjustments)
   const redetectMarkers = useAppStore((state) => state.redetectMarkers)
   const setCropMode = useAppStore((state) => state.setCropMode)
+  const setPatchCropMode = useAppStore((state) => state.setPatchCropMode)
   const setSelectedOverlayId = useAppStore((state) => state.setSelectedOverlayId)
+  const copyOverlay = useAppStore((state) => state.copyOverlay)
   const copySelectedOverlay = useAppStore((state) => state.copySelectedOverlay)
   const pasteCopiedOverlay = useAppStore((state) => state.pasteCopiedOverlay)
   const sourceImageDataUrl = useAppStore((state) => state.editor.sourceImageDataUrl)
@@ -205,8 +241,12 @@ export function OverlayControls() {
   const maxOffsetX = Math.round(settings.contentWidth / 2)
   const maxOffsetY = Math.round(settings.contentHeight / 2)
 
-  const markers = overlays.filter((overlay) => overlay.type === 'marker')
-  const crops = overlays.filter((overlay) => overlay.type === 'crop')
+  const markers = overlays.filter(
+    (overlay) => overlay.type === 'marker' && !overlay.patchImageDataUrl,
+  )
+  const crops = overlays.filter(
+    (overlay) => overlay.type === 'crop' || Boolean(overlay.patchImageDataUrl),
+  )
   const hasSelection = overlays.some((overlay) => overlay.id === selectedOverlayId)
   const clipboardLabel =
     overlayClipboard?.type === 'marker'
@@ -235,7 +275,7 @@ export function OverlayControls() {
     <div className="space-y-3">
       <button
         type="button"
-        disabled={!sourceImageDataUrl || isCropMode || isDocumentCropMode}
+        disabled={!sourceImageDataUrl || isCropMode || isDocumentCropMode || isPatchCropMode}
         onClick={() => setCropMode(true)}
         className="w-full rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white enabled:hover:bg-sky-500 disabled:opacity-40"
       >
@@ -252,18 +292,33 @@ export function OverlayControls() {
         </button>
       )}
 
+      {isPatchCropMode && (
+        <button
+          type="button"
+          onClick={() => setPatchCropMode(false)}
+          className="w-full rounded-md bg-zinc-800 px-3 py-1.5 text-xs hover:bg-zinc-700"
+        >
+          Cancel pasted crop
+        </button>
+      )}
+      {isPatchCropMode && (
+        <p className="text-[10px] text-amber-300">
+          Drag on the pasted zone in the preview to crop its image.
+        </p>
+      )}
+
       <div className="flex gap-2">
         <button
           type="button"
           disabled={!hasSelection}
-          onClick={() => copySelectedOverlay()}
+          onClick={() => void copySelectedOverlay()}
           className="flex-1 rounded-md bg-zinc-800 px-2 py-1.5 text-xs enabled:hover:bg-zinc-700 disabled:opacity-40"
         >
           Copy zone
         </button>
         <button
           type="button"
-          disabled={!overlayClipboard || !sourceImageDataUrl}
+          disabled={!overlayClipboard?.patchImageDataUrl || !sourceImageDataUrl}
           onClick={() => void handlePaste()}
           className="flex-1 rounded-md bg-zinc-800 px-2 py-1.5 text-xs enabled:hover:bg-zinc-700 disabled:opacity-40"
         >
@@ -272,7 +327,8 @@ export function OverlayControls() {
       </div>
       {overlayClipboard && (
         <p className="text-[10px] leading-snug text-zinc-500">
-          {clipboardLabel} copied. Open another page and paste — saves as a new page.
+          {clipboardLabel} copied with its image. Open another page and paste — saves as a
+          new page showing that crop on the other document.
         </p>
       )}
       {pasteMessage && (
@@ -314,7 +370,7 @@ export function OverlayControls() {
               maxOffsetY={maxOffsetY}
               selected={selectedOverlayId === overlay.id}
               onSelect={() => setSelectedOverlayId(overlay.id)}
-              onCopy={() => copySelectedOverlay()}
+              onCopy={() => void copyOverlay(overlay.id)}
             />
           ))}
         </div>
@@ -342,9 +398,10 @@ export function OverlayControls() {
               maxOffsetX={maxOffsetX}
               maxOffsetY={maxOffsetY}
               showRectSliders
+              canCropPatch={Boolean(overlay.patchImageDataUrl)}
               selected={selectedOverlayId === overlay.id}
               onSelect={() => setSelectedOverlayId(overlay.id)}
-              onCopy={() => copySelectedOverlay()}
+              onCopy={() => void copyOverlay(overlay.id)}
             />
           ))}
         </div>

@@ -154,33 +154,46 @@ function drawBlurredContent(
   )
 }
 
-function drawMagnifiedOverlay(
+async function drawMagnifiedOverlay(
   ctx: CanvasRenderingContext2D,
   sourceImage: HTMLImageElement,
   overlay: MagnifierOverlay,
   placement: ContentPlacement,
   settings: AppSettings,
 ) {
-  const inset = overlay.type === 'marker' ? settings.markerDetection.markerInset / placement.scale : 0
-  const srcX = overlay.rect.x * sourceImage.naturalWidth + inset
-  const srcY = overlay.rect.y * sourceImage.naturalHeight + inset
-  const srcW = overlay.rect.w * sourceImage.naturalWidth - inset * 2
-  const srcH = overlay.rect.h * sourceImage.naturalHeight - inset * 2
-
-  if (srcW <= 0 || srcH <= 0) return
-
   const dest = getOverlayDestRect(overlay, placement, settings)
   if (!dest) return
 
   const { destX, destY, destW, destH } = dest
-
   const patch = document.createElement('canvas')
-  patch.width = Math.ceil(srcW)
-  patch.height = Math.ceil(srcH)
   const patchCtx = patch.getContext('2d')
   if (!patchCtx) return
 
-  patchCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, 0, 0, patch.width, patch.height)
+  if (overlay.patchImageDataUrl) {
+    const pasted = await loadImage(overlay.patchImageDataUrl)
+    const crop = overlay.patchCropRect
+    const srcX = crop ? crop.x * pasted.naturalWidth : 0
+    const srcY = crop ? crop.y * pasted.naturalHeight : 0
+    const srcW = crop ? crop.w * pasted.naturalWidth : pasted.naturalWidth
+    const srcH = crop ? crop.h * pasted.naturalHeight : pasted.naturalHeight
+    if (srcW <= 1 || srcH <= 1) return
+
+    patch.width = Math.max(1, Math.round(srcW))
+    patch.height = Math.max(1, Math.round(srcH))
+    patchCtx.drawImage(pasted, srcX, srcY, srcW, srcH, 0, 0, patch.width, patch.height)
+  } else {
+    const inset =
+      overlay.type === 'marker' ? settings.markerDetection.markerInset / placement.scale : 0
+    const srcX = overlay.rect.x * sourceImage.naturalWidth + inset
+    const srcY = overlay.rect.y * sourceImage.naturalHeight + inset
+    const srcW = overlay.rect.w * sourceImage.naturalWidth - inset * 2
+    const srcH = overlay.rect.h * sourceImage.naturalHeight - inset * 2
+    if (srcW <= 0 || srcH <= 0) return
+
+    patch.width = Math.ceil(srcW)
+    patch.height = Math.ceil(srcH)
+    patchCtx.drawImage(sourceImage, srcX, srcY, srcW, srcH, 0, 0, patch.width, patch.height)
+  }
 
   enhanceOverlayPatch(
     patchCtx,
@@ -287,7 +300,8 @@ export async function renderPageToCanvas(
 
   if (!renderOptions.omitOverlays) {
     for (const overlay of overlays) {
-      drawMagnifiedOverlay(ctx, sourceImage, overlay, placement, settings)
+      await drawMagnifiedOverlay(ctx, sourceImage, overlay, placement, settings)
+      if (renderOptions.shouldContinue && !renderOptions.shouldContinue()) return
     }
   }
 }
