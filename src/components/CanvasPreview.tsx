@@ -4,6 +4,7 @@ import { renderPageToCanvas } from '../utils/canvasRenderer'
 import {
   canvasToDisplayCoords,
   normalizedRectFromCanvasDrag,
+  normalizedRectFromDestBoxDrag,
   pointerToCanvasCoords,
 } from '../utils/cropCoords'
 import { loadImage } from '../utils/imageLoader'
@@ -66,10 +67,13 @@ export function CanvasPreview({
   const documentScale = useAppStore((state) => state.editor.documentScale)
   const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const isDocumentCropMode = useAppStore((state) => state.editor.isDocumentCropMode)
+  const isPatchCropMode = useAppStore((state) => state.editor.isPatchCropMode)
   const setCropMode = useAppStore((state) => state.setCropMode)
   const setDocumentCropMode = useAppStore((state) => state.setDocumentCropMode)
+  const setPatchCropMode = useAppStore((state) => state.setPatchCropMode)
   const addCropOverlay = useAppStore((state) => state.addCropOverlay)
   const cropDocument = useAppStore((state) => state.cropDocument)
+  const cropPastedOverlay = useAppStore((state) => state.cropPastedOverlay)
   const updateOverlayOffset = useAppStore((state) => state.updateOverlayOffset)
   const updateOverlayRect = useAppStore((state) => state.updateOverlayRect)
   const selectedOverlayId = useAppStore((state) => state.editor.selectedOverlayId)
@@ -79,7 +83,7 @@ export function CanvasPreview({
   const [drag, setDrag] = useState<InteractionDrag | null>(null)
   const [hoverCursor, setHoverCursor] = useState('default')
 
-  const isSelecting = isCropMode || isDocumentCropMode
+  const isSelecting = isCropMode || isDocumentCropMode || isPatchCropMode
   const canEditOverlays = Boolean(sourceImageDataUrl) && !isSelecting
   const aspect = settings.backgroundHeight / settings.backgroundWidth
 
@@ -153,6 +157,7 @@ export function CanvasPreview({
       if (isSelecting) {
         setCropMode(false)
         setDocumentCropMode(false)
+        setPatchCropMode(false)
         setDrag(null)
         return
       }
@@ -160,7 +165,7 @@ export function CanvasPreview({
     }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [isSelecting, setCropMode, setDocumentCropMode, setSelectedOverlayId])
+  }, [isSelecting, setCropMode, setDocumentCropMode, setPatchCropMode, setSelectedOverlayId])
 
   const overlayBoxes = useMemo(
     () =>
@@ -179,6 +184,20 @@ export function CanvasPreview({
     (dragState: SelectionDrag) => {
       const canvas = canvasRef.current
       if (!canvas || imageSize.width === 0) return
+
+      if (isPatchCropMode && selectedOverlayId) {
+        const box = overlayBoxes.find((item) => item.overlay.id === selectedOverlayId)
+        const rect = box
+          ? normalizedRectFromDestBoxDrag(
+              { x: dragState.startX, y: dragState.startY },
+              { x: dragState.currentX, y: dragState.currentY },
+              box,
+            )
+          : null
+        if (rect) cropPastedOverlay(selectedOverlayId, rect)
+        else setPatchCropMode(false)
+        return
+      }
 
       const rect = normalizedRectFromCanvasDrag(
         { x: dragState.startX, y: dragState.startY },
@@ -206,14 +225,19 @@ export function CanvasPreview({
     [
       addCropOverlay,
       cropDocument,
+      cropPastedOverlay,
       documentCropRect,
       documentScale,
       imageSize.height,
       imageSize.width,
       isCropMode,
       isDocumentCropMode,
+      isPatchCropMode,
+      overlayBoxes,
+      selectedOverlayId,
       setCropMode,
       setDocumentCropMode,
+      setPatchCropMode,
       settings,
     ],
   )

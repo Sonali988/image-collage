@@ -14,8 +14,8 @@ import type {
   TabId,
 } from '../types'
 import { detectGreenMarkers } from '../utils/markerDetector'
-import { createId, loadImage, readFileAsDataUrl, rotateImageDataUrl } from '../utils/imageLoader'
-import { renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
+import { createId, extractOverlayPatch, loadImage, readFileAsDataUrl, rotateImageDataUrl } from '../utils/imageLoader'
+import { placePastedOverlayInVisibleArea, renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
 import { idbStorage } from '../utils/idbStorage'
 import {
   buildCollageTitles,
@@ -113,21 +113,14 @@ function normalizeOverlay(overlay: Page['overlays'][number]) {
     userScale: overlay.userScale ?? 1,
     offsetX: overlay.offsetX ?? 0,
     offsetY: overlay.offsetY ?? 0,
+    patchImageDataUrl: overlay.patchImageDataUrl ?? null,
+    patchCropRect: overlay.patchCropRect ?? null,
   }
 }
 
 function nextCropLabel(overlays: MagnifierOverlay[]): string {
   const cropCount = overlays.filter((overlay) => overlay.type === 'crop').length
   return `Crop ${cropCount + 1}`
-}
-
-function nextMarkerLabel(overlays: MagnifierOverlay[]): string {
-  const markerCount = overlays.filter((overlay) => overlay.type === 'marker').length
-  return `Marker ${markerCount + 1}`
-}
-
-function nextOverlayLabel(overlays: MagnifierOverlay[], type: MagnifierOverlay['type']): string {
-  return type === 'crop' ? nextCropLabel(overlays) : nextMarkerLabel(overlays)
 }
 
 function nextPastedPageName(baseName: string, pages: Page[]): string {
@@ -208,6 +201,9 @@ type AppState = {
   setDocumentCropMode: (enabled: boolean) => void
   cropDocument: (rect: MarkerRect) => void
   clearDocumentCrop: () => void
+  setPatchCropMode: (enabled: boolean) => void
+  cropPastedOverlay: (id: string, rect: MarkerRect) => void
+  clearPastedOverlayCrop: (id: string) => void
   setDocumentScale: (scale: number) => void
   addCropOverlay: (rect: MarkerRect) => void
   updateOverlayRect: (id: string, rect: MarkerRect) => void
@@ -215,7 +211,8 @@ type AppState = {
   updateOverlayOffset: (id: string, offsetX: number, offsetY: number) => void
   removeOverlay: (id: string) => void
   setSelectedOverlayId: (id: string | null) => void
-  copySelectedOverlay: () => boolean
+  copySelectedOverlay: () => Promise<boolean>
+  copyOverlay: (id: string) => Promise<boolean>
   pasteCopiedOverlay: () => Promise<boolean>
   clearOverlayClipboard: () => void
   resetOverlayAdjustments: () => void
@@ -243,6 +240,7 @@ const initialEditor: EditorState = {
   detectionError: null,
   isCropMode: false,
   isDocumentCropMode: false,
+  isPatchCropMode: false,
 }
 
 function runMarkerDetection(
@@ -325,6 +323,7 @@ export const useAppStore = create<AppState>()(
             detectionError: null,
             isCropMode: false,
             isDocumentCropMode: false,
+            isPatchCropMode: false,
           },
         }))
 
@@ -365,6 +364,7 @@ export const useAppStore = create<AppState>()(
             detectionError: null,
             isCropMode: false,
             isDocumentCropMode: false,
+            isPatchCropMode: false,
             selectedOverlayId: null,
           },
         }))
@@ -480,6 +480,7 @@ export const useAppStore = create<AppState>()(
             ...state.editor,
             isCropMode: enabled,
             isDocumentCropMode: enabled ? false : state.editor.isDocumentCropMode,
+            isPatchCropMode: enabled ? false : state.editor.isPatchCropMode,
           },
         })),
 
@@ -489,6 +490,7 @@ export const useAppStore = create<AppState>()(
             ...state.editor,
             isDocumentCropMode: enabled,
             isCropMode: enabled ? false : state.editor.isCropMode,
+            isPatchCropMode: enabled ? false : state.editor.isPatchCropMode,
           },
         })),
 
@@ -510,6 +512,47 @@ export const useAppStore = create<AppState>()(
       setDocumentScale: (scale) =>
         set((state) => ({
           editor: { ...state.editor, documentScale: clampDocumentScale(scale) },
+        })),
+
+      setPatchCropMode: (enabled) =>
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            isPatchCropMode: enabled,
+            isCropMode: enabled ? false : state.editor.isCropMode,
+            isDocumentCropMode: enabled ? false : state.editor.isDocumentCropMode,
+          },
+        })),
+
+      cropPastedOverlay: (id, rect) =>
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            isPatchCropMode: false,
+            overlays: state.editor.overlays.map((overlay) => {
+              if (overlay.id !== id || !overlay.patchImageDataUrl) return overlay
+              const current = overlay.patchCropRect ?? { x: 0, y: 0, w: 1, h: 1 }
+              return {
+                ...overlay,
+                patchCropRect: {
+                  x: current.x + rect.x * current.w,
+                  y: current.y + rect.y * current.h,
+                  w: rect.w * current.w,
+                  h: rect.h * current.h,
+                },
+              }
+            }),
+          },
+        })),
+
+      clearPastedOverlayCrop: (id) =>
+        set((state) => ({
+          editor: {
+            ...state.editor,
+            overlays: state.editor.overlays.map((overlay) =>
+              overlay.id === id ? { ...overlay, patchCropRect: null } : overlay,
+            ),
+          },
         })),
 
       addCropOverlay: (rect) =>
@@ -581,56 +624,119 @@ export const useAppStore = create<AppState>()(
           editor: { ...state.editor, selectedOverlayId: id },
         })),
 
-      copySelectedOverlay: () => {
-        const { editor } = get()
-        const selected = editor.overlays.find(
-          (overlay) => overlay.id === editor.selectedOverlayId,
+      copyOverlay: async (id) => {
+        const { editor, settings } = get()
+        const overlay = editor.overlays.find((item) => item.id === id)
+        if (!overlay || !editor.sourceImageDataUrl) return false
+
+        const patchImageDataUrl = await extractOverlayPatch(
+          editor.sourceImageDataUrl,
+          overlay,
+          settings.markerDetection.markerInset,
         )
-        if (!selected) return false
+        if (!patchImageDataUrl) return false
 
         set({
           overlayClipboard: {
-            type: selected.type,
-            rect: { ...selected.rect },
-            userScale: selected.userScale,
-            offsetX: selected.offsetX ?? 0,
-            offsetY: selected.offsetY ?? 0,
+            type: overlay.type,
+            rect: { ...overlay.rect },
+            userScale: overlay.userScale,
+            offsetX: overlay.offsetX ?? 0,
+            offsetY: overlay.offsetY ?? 0,
+            patchImageDataUrl,
           },
         })
         return true
       },
 
+      copySelectedOverlay: async () => {
+        const { editor } = get()
+        if (!editor.selectedOverlayId) return false
+        return get().copyOverlay(editor.selectedOverlayId)
+      },
+
       pasteCopiedOverlay: async () => {
-        const { editor, overlayClipboard } = get()
-        if (!overlayClipboard || !editor.sourceImageDataUrl) return false
+        const { editor, overlayClipboard, settings, pages } = get()
+        if (!overlayClipboard?.patchImageDataUrl || !editor.sourceImageDataUrl) return false
+
+        let imageWidth = 1
+        let imageHeight = 1
+        try {
+          const image = await loadImage(editor.sourceImageDataUrl)
+          imageWidth = image.naturalWidth
+          imageHeight = image.naturalHeight
+        } catch {
+          return false
+        }
+
+        const placed = placePastedOverlayInVisibleArea(
+          overlayClipboard,
+          imageWidth,
+          imageHeight,
+          settings,
+          editor.documentScale,
+          editor.documentCropRect,
+        )
 
         const overlay: MagnifierOverlay = {
           id: createId(),
-          label: nextOverlayLabel(editor.overlays, overlayClipboard.type),
-          type: overlayClipboard.type,
-          rect: { ...overlayClipboard.rect },
-          userScale: overlayClipboard.userScale,
-          offsetX: overlayClipboard.offsetX,
-          offsetY: overlayClipboard.offsetY,
+          label: nextCropLabel(editor.overlays),
+          type: 'crop',
+          rect: placed.rect,
+          userScale: placed.userScale,
+          offsetX: placed.offsetX,
+          offsetY: placed.offsetY,
+          patchImageDataUrl: overlayClipboard.patchImageDataUrl ?? null,
         }
 
         const nextOverlays = [...editor.overlays, overlay]
-        set((state) => ({
-          editor: {
-            ...state.editor,
-            overlays: nextOverlays,
-            selectedOverlayId: overlay.id,
-          },
-        }))
-
-        // Always save as a new page so the source page is not overwritten.
         const baseName =
           editor.sourceImageName.replace(/\.[^.]+$/, '') ||
           editor.sourceImageName ||
           'Page'
-        await get().saveCurrentPage(nextPastedPageName(baseName, get().pages), {
-          asNew: true,
-        })
+        const name = nextPastedPageName(baseName, pages)
+
+        let thumbnailDataUrl = editor.sourceImageDataUrl
+        try {
+          thumbnailDataUrl = await renderPageToDataUrl(
+            settings,
+            editor.sourceImageDataUrl,
+            nextOverlays,
+            'image/png',
+            undefined,
+            {
+              skipBackground: true,
+              showPlaceholderBackground: true,
+              documentCropRect: editor.documentCropRect,
+              documentScale: editor.documentScale,
+            },
+          )
+        } catch {
+          // Fall back to the source image if the preview render fails.
+        }
+
+        const page: Page = {
+          id: createId(),
+          name,
+          sourceImageDataUrl: editor.sourceImageDataUrl,
+          overlays: nextOverlays,
+          settings: { ...settings },
+          documentCropRect: editor.documentCropRect,
+          documentScale: editor.documentScale,
+          thumbnailDataUrl,
+          createdAt: Date.now(),
+        }
+
+        set((state) => ({
+          pages: [page, ...state.pages],
+          editor: {
+            ...state.editor,
+            overlays: nextOverlays,
+            selectedOverlayId: overlay.id,
+            activePageId: page.id,
+            sourceImageName: page.name,
+          },
+        }))
         return true
       },
 
@@ -783,6 +889,7 @@ export const useAppStore = create<AppState>()(
             detectionError: null,
             isCropMode: false,
             isDocumentCropMode: false,
+            isPatchCropMode: false,
           },
         })
       },
@@ -911,6 +1018,7 @@ export const useAppStore = create<AppState>()(
       partialize: (state) => ({
         settings: state.settings,
         pages: state.pages,
+        overlayClipboard: state.overlayClipboard,
       }),
       merge: (persistedState, currentState) => ({
         ...currentState,

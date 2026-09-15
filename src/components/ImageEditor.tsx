@@ -46,7 +46,8 @@ export function ImageEditor() {
       if (!mod) return
 
       if (event.key === 'c') {
-        if (copySelectedOverlay()) event.preventDefault()
+        event.preventDefault()
+        void copySelectedOverlay()
         return
       }
       if (event.key === 'v') {
@@ -182,7 +183,8 @@ export function ImageEditor() {
                 />
               </label>
               <p className="text-[10px] leading-snug text-zinc-500">
-                Zoom scales the whole page. Use Crop document to hide edges.
+                Zoom scales the visible page. After Crop document, zoom applies to
+                that cropped area.
               </p>
             </div>
           )}

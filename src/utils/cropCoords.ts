@@ -36,8 +36,15 @@ function canvasPointToNormalized(
   imageHeight: number,
   settings: AppSettings,
   documentScale = 1,
+  documentCropRect?: MarkerRect | null,
 ): { x: number; y: number } {
-  const placement = getContentPlacement(imageWidth, imageHeight, settings, documentScale)
+  const placement = getContentPlacement(
+    imageWidth,
+    imageHeight,
+    settings,
+    documentScale,
+    documentCropRect,
+  )
   const nx = (canvasX - placement.drawX) / placement.drawW
   const ny = (canvasY - placement.drawY) / placement.drawH
   return {
@@ -62,6 +69,7 @@ export function normalizedRectFromCanvasDrag(
     imageHeight,
     settings,
     documentScale,
+    _documentCropRect,
   )
   const p2 = canvasPointToNormalized(
     end.x,
@@ -70,6 +78,7 @@ export function normalizedRectFromCanvasDrag(
     imageHeight,
     settings,
     documentScale,
+    _documentCropRect,
   )
 
   let x = Math.min(p1.x, p2.x)
@@ -82,6 +91,30 @@ export function normalizedRectFromCanvasDrag(
   w = Math.min(1 - x, w)
   h = Math.min(1 - y, h)
 
+  if (w < MIN_RECT_SIZE || h < MIN_RECT_SIZE) return null
+  return { x, y, w, h }
+}
+
+export function normalizedRectFromDestBoxDrag(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  dest: { destX: number; destY: number; destW: number; destH: number },
+): MarkerRect | null {
+  if (dest.destW <= 0 || dest.destH <= 0) return null
+
+  const toNorm = (point: { x: number; y: number }) => ({
+    x: Math.max(0, Math.min(1, (point.x - dest.destX) / dest.destW)),
+    y: Math.max(0, Math.min(1, (point.y - dest.destY) / dest.destH)),
+  })
+
+  const p1 = toNorm(start)
+  const p2 = toNorm(end)
+  let x = Math.min(p1.x, p2.x)
+  let y = Math.min(p1.y, p2.y)
+  let w = Math.abs(p2.x - p1.x)
+  let h = Math.abs(p2.y - p1.y)
+  w = Math.min(1 - x, w)
+  h = Math.min(1 - y, h)
   if (w < MIN_RECT_SIZE || h < MIN_RECT_SIZE) return null
   return { x, y, w, h }
 }

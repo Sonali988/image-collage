@@ -24,7 +24,13 @@ export function getOverlayDestBoxes(
 ): OverlayDestBox[] {
   if (imageWidth <= 0 || imageHeight <= 0) return []
 
-  const placement = getContentPlacement(imageWidth, imageHeight, settings, documentScale)
+  const placement = getContentPlacement(
+    imageWidth,
+    imageHeight,
+    settings,
+    documentScale,
+    _documentCropRect,
+  )
   const boxes: OverlayDestBox[] = []
 
   for (const overlay of overlays) {
@@ -114,7 +120,13 @@ export function resizeOverlaySourceRect(
   _documentCropRect?: MarkerRect | null,
   documentScale = 1,
 ): MarkerRect {
-  const placement = getContentPlacement(imageWidth, imageHeight, settings, documentScale)
+  const placement = getContentPlacement(
+    imageWidth,
+    imageHeight,
+    settings,
+    documentScale,
+    _documentCropRect,
+  )
   const zoom = Math.max(0.01, settings.defaultZoomFactor * userScale)
   const dW = deltaCanvasX / (placement.drawW * zoom)
   const dH = deltaCanvasY / (placement.drawH * zoom)
