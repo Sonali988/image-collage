@@ -15,7 +15,7 @@ import type {
 } from '../types'
 import { detectGreenMarkers } from '../utils/markerDetector'
 import { createId, extractOverlayPatch, loadImage, readFileAsDataUrl, rotateImageDataUrl } from '../utils/imageLoader'
-import { renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
+import { placePastedOverlayInVisibleArea, renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
 import { idbStorage } from '../utils/idbStorage'
 import {
   buildCollageTitles,
@@ -659,14 +659,33 @@ export const useAppStore = create<AppState>()(
         const { editor, overlayClipboard, settings, pages } = get()
         if (!overlayClipboard?.patchImageDataUrl || !editor.sourceImageDataUrl) return false
 
+        let imageWidth = 1
+        let imageHeight = 1
+        try {
+          const image = await loadImage(editor.sourceImageDataUrl)
+          imageWidth = image.naturalWidth
+          imageHeight = image.naturalHeight
+        } catch {
+          return false
+        }
+
+        const placed = placePastedOverlayInVisibleArea(
+          overlayClipboard,
+          imageWidth,
+          imageHeight,
+          settings,
+          editor.documentScale,
+          editor.documentCropRect,
+        )
+
         const overlay: MagnifierOverlay = {
           id: createId(),
           label: nextCropLabel(editor.overlays),
           type: 'crop',
-          rect: { ...overlayClipboard.rect },
-          userScale: overlayClipboard.userScale,
-          offsetX: overlayClipboard.offsetX,
-          offsetY: overlayClipboard.offsetY,
+          rect: placed.rect,
+          userScale: placed.userScale,
+          offsetX: placed.offsetX,
+          offsetY: placed.offsetY,
           patchImageDataUrl: overlayClipboard.patchImageDataUrl ?? null,
         }
 

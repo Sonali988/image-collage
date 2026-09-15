@@ -36,8 +36,15 @@ function canvasPointToNormalized(
   imageHeight: number,
   settings: AppSettings,
   documentScale = 1,
+  documentCropRect?: MarkerRect | null,
 ): { x: number; y: number } {
-  const placement = getContentPlacement(imageWidth, imageHeight, settings, documentScale)
+  const placement = getContentPlacement(
+    imageWidth,
+    imageHeight,
+    settings,
+    documentScale,
+    documentCropRect,
+  )
   const nx = (canvasX - placement.drawX) / placement.drawW
   const ny = (canvasY - placement.drawY) / placement.drawH
   return {
@@ -62,6 +69,7 @@ export function normalizedRectFromCanvasDrag(
     imageHeight,
     settings,
     documentScale,
+    _documentCropRect,
   )
   const p2 = canvasPointToNormalized(
     end.x,
@@ -70,6 +78,7 @@ export function normalizedRectFromCanvasDrag(
     imageHeight,
     settings,
     documentScale,
+    _documentCropRect,
   )
 
   let x = Math.min(p1.x, p2.x)

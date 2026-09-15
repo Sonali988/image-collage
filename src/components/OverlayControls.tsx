@@ -327,8 +327,8 @@ export function OverlayControls() {
       </div>
       {overlayClipboard && (
         <p className="text-[10px] leading-snug text-zinc-500">
-          {clipboardLabel} copied with its image. Open another page and paste — saves as a
-          new page showing that crop on the other document.
+          {clipboardLabel} copied with its image. Paste places it in the visible
+          page area and saves a new page.
         </p>
       )}
       {pasteMessage && (

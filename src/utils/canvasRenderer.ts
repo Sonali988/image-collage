@@ -25,6 +25,7 @@ export function getContentPlacement(
   imageHeight: number,
   settings: AppSettings,
   documentScale = 1,
+  documentCropRect?: MarkerRect | null,
 ): ContentPlacement {
   const contentX = (settings.backgroundWidth - settings.contentWidth) / 2
   const contentY = (settings.backgroundHeight - settings.contentHeight) / 2
@@ -38,13 +39,16 @@ export function getContentPlacement(
     }
   }
 
-  const fit = Math.min(
-    settings.contentWidth / imageWidth,
-    settings.contentHeight / imageHeight,
-  )
-  const baseW = imageWidth * fit
-  const baseH = imageHeight * fit
-  // Grow into the full canvas; never scale past the export frame.
+  const crop =
+    documentCropRect && documentCropRect.w > 0 && documentCropRect.h > 0
+      ? documentCropRect
+      : null
+  const srcW = crop ? crop.w * imageWidth : imageWidth
+  const srcH = crop ? crop.h * imageHeight : imageHeight
+
+  const fit = Math.min(settings.contentWidth / srcW, settings.contentHeight / srcH)
+  const baseW = srcW * fit
+  const baseH = srcH * fit
   const maxZoom = Math.max(
     1,
     Math.min(settings.backgroundWidth / baseW, settings.backgroundHeight / baseH),
@@ -52,12 +56,26 @@ export function getContentPlacement(
   const requested = Number.isFinite(documentScale) && documentScale > 0 ? documentScale : 1
   const zoom = Math.min(requested, maxZoom)
   const scale = fit * zoom
-  const drawW = imageWidth * scale
-  const drawH = imageHeight * scale
+  const visibleW = srcW * scale
+  const visibleH = srcH * scale
+  const visibleX = contentX + (settings.contentWidth - visibleW) / 2
+  const visibleY = contentY + (settings.contentHeight - visibleH) / 2
 
+  if (!crop) {
+    return {
+      drawX: visibleX,
+      drawY: visibleY,
+      drawW: visibleW,
+      drawH: visibleH,
+      scale,
+    }
+  }
+
+  const drawW = visibleW / crop.w
+  const drawH = visibleH / crop.h
   return {
-    drawX: contentX + (settings.contentWidth - drawW) / 2,
-    drawY: contentY + (settings.contentHeight - drawH) / 2,
+    drawX: visibleX - crop.x * drawW,
+    drawY: visibleY - crop.y * drawH,
     drawW,
     drawH,
     scale,
@@ -106,6 +124,91 @@ function visibleCropRect(placement: ContentPlacement, documentCropRect: MarkerRe
     w: documentCropRect.w * placement.drawW,
     h: documentCropRect.h * placement.drawH,
   }
+}
+
+function visibleSourceRect(documentCropRect?: MarkerRect | null): MarkerRect {
+  if (documentCropRect && documentCropRect.w > 0 && documentCropRect.h > 0) {
+    return documentCropRect
+  }
+  return { x: 0, y: 0, w: 1, h: 1 }
+}
+
+/** Place a pasted overlay inside the currently visible document, not off-canvas. */
+export function placePastedOverlayInVisibleArea(
+  clipboard: Pick<MagnifierOverlay, 'rect' | 'userScale'>,
+  imageWidth: number,
+  imageHeight: number,
+  settings: AppSettings,
+  documentScale = 1,
+  documentCropRect?: MarkerRect | null,
+): Pick<MagnifierOverlay, 'rect' | 'offsetX' | 'offsetY' | 'userScale'> {
+  const visible = visibleSourceRect(documentCropRect)
+  const w = Math.min(Math.max(clipboard.rect.w, 0.04), visible.w)
+  const h = Math.min(Math.max(clipboard.rect.h, 0.04), visible.h)
+  const rect: MarkerRect = {
+    x: visible.x + (visible.w - w) / 2,
+    y: visible.y + (visible.h - h) / 2,
+    w,
+    h,
+  }
+
+  let userScale = clipboard.userScale > 0 ? clipboard.userScale : 1
+  const placement = getContentPlacement(
+    imageWidth,
+    imageHeight,
+    settings,
+    documentScale,
+    documentCropRect,
+  )
+  const bounds =
+    documentCropRect && documentCropRect.w > 0 && documentCropRect.h > 0
+      ? visibleCropRect(placement, documentCropRect)
+      : {
+          x: 0,
+          y: 0,
+          w: settings.backgroundWidth,
+          h: settings.backgroundHeight,
+        }
+
+  const measure = (scale: number) =>
+    getOverlayDestRect(
+      {
+        id: 'paste-preview',
+        label: '',
+        type: 'crop',
+        rect,
+        userScale: scale,
+        offsetX: 0,
+        offsetY: 0,
+      },
+      placement,
+      settings,
+    )
+
+  let dest = measure(userScale)
+  if (dest && bounds.h > 0 && dest.destH > bounds.h) {
+    userScale = Math.max(0.25, userScale * (bounds.h / dest.destH))
+    dest = measure(userScale)
+  }
+  if (dest && bounds.w > 0 && dest.destW > bounds.w) {
+    userScale = Math.max(0.25, userScale * (bounds.w / dest.destW))
+    dest = measure(userScale)
+  }
+
+  let offsetX = 0
+  let offsetY = 0
+  if (dest) {
+    let destX = dest.destX
+    let destY = dest.destY
+    if (destX + dest.destW > bounds.x + bounds.w) destX = bounds.x + bounds.w - dest.destW
+    if (destY + dest.destH > bounds.y + bounds.h) destY = bounds.y + bounds.h - dest.destH
+    if (destX < bounds.x) destX = bounds.x
+    if (destY < bounds.y) destY = bounds.y
+    offsetX = destX - dest.destX
+    offsetY = destY - dest.destY
+  }
+
+  return { rect, offsetX, offsetY, userScale }
 }
 
 function drawBlurredContent(
@@ -282,6 +385,7 @@ export async function renderPageToCanvas(
     sourceImage.naturalHeight,
     settings,
     documentScale,
+    documentCropRect,
   )
 
   if (!renderOptions.overlaysOnly) {
