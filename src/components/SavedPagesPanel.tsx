@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { isVideoPage } from '../utils/pageKind'
 
 type SavedPagesPanelProps = {
   title?: string
@@ -20,8 +21,7 @@ export function SavedPagesPanel({
         : allPages.filter((page) => !page.isCollage),
     [allPages, showCollages],
   )
-  const sourceImageDataUrl = useAppStore((state) => state.editor.sourceImageDataUrl)
-  const sourceImageName = useAppStore((state) => state.editor.sourceImageName)
+  const activePageId = useAppStore((state) => state.editor.activePageId)
   const loadPageIntoEditor = useAppStore((state) => state.loadPageIntoEditor)
   const deletePage = useAppStore((state) => state.deletePage)
   const renamePage = useAppStore((state) => state.renamePage)
@@ -30,9 +30,7 @@ export function SavedPagesPanel({
   const [renameValue, setRenameValue] = useState('')
 
   const isActivePage = (page: (typeof pages)[number]) =>
-    !page.isCollage &&
-    page.sourceImageDataUrl === sourceImageDataUrl &&
-    page.name === sourceImageName
+    !page.isCollage && activePageId === page.id
 
   const startRename = (pageId: string, currentName: string) => {
     setRenamingId(pageId)
@@ -125,7 +123,10 @@ export function SavedPagesPanel({
                   </form>
                 ) : (
                   <div className="flex items-center gap-1 p-1">
-                    <p className="min-w-0 flex-1 truncate text-[10px] text-zinc-400">{page.name}</p>
+                    <p className="min-w-0 flex-1 truncate text-[10px] text-zinc-400">
+                      {isVideoPage(page) ? '▶ ' : ''}
+                      {page.name}
+                    </p>
                     <button
                       type="button"
                       onClick={() => startRename(page.id, page.name)}
@@ -214,7 +215,10 @@ export function SavedPagesPanel({
                     </button>
                   </form>
                 ) : (
-                  <p className="truncate text-xs font-medium text-zinc-300">{page.name}</p>
+                  <p className="truncate text-xs font-medium text-zinc-300">
+                    {isVideoPage(page) ? 'Video · ' : ''}
+                    {page.name}
+                  </p>
                 )}
 
                 <div className="flex gap-2">

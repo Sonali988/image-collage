@@ -6,6 +6,8 @@ import {
   renderCollageFromPages,
   renderPageToDataUrl,
 } from './canvasRenderer'
+import { isVideoPage } from './pageKind'
+import { getVideoBlob } from './videoBlobStorage'
 
 function getReportsZipFilename(date = new Date()): string {
   const year = date.getFullYear()
@@ -14,7 +16,19 @@ function getReportsZipFilename(date = new Date()): string {
   return `reports-${year}-${month}-${day}.zip`
 }
 
+function videoExportExtension(page: Page): string {
+  const base = page.name.toLowerCase()
+  if (base.endsWith('.webm')) return '.webm'
+  if (base.endsWith('.mov')) return '.mov'
+  if (base.endsWith('.m4v')) return '.m4v'
+  return '.mp4'
+}
+
 export async function renderPageForExport(page: Page, globalSettings: AppSettings, allPages: Page[]) {
+  if (isVideoPage(page)) {
+    return page.thumbnailDataUrl
+  }
+
   if (page.isCollage && page.collagePanelPageIds?.length) {
     const panelPages = page.collagePanelPageIds
       .map((id) => allPages.find((item) => item.id === id && !item.isCollage))
@@ -49,6 +63,16 @@ export async function downloadPagePng(
   allPages: Page[] = [],
   filename?: string,
 ) {
+  if (isVideoPage(page) && page.sourceVideoId) {
+    const blob = await getVideoBlob(page.sourceVideoId)
+    if (blob) {
+      const ext = videoExportExtension(page)
+      const baseName = page.name.replace(/\.[^.]+$/, '') || page.name
+      saveAs(blob, filename ?? `${baseName}${ext}`)
+      return
+    }
+  }
+
   const dataUrl = await renderPageForExport(page, globalSettings, allPages)
   const response = await fetch(dataUrl)
   const blob = await response.blob()
@@ -78,6 +102,16 @@ export async function downloadSelectedPagesAsZip(
   const zip = new JSZip()
 
   for (const page of selected) {
+    if (isVideoPage(page) && page.sourceVideoId) {
+      const blob = await getVideoBlob(page.sourceVideoId)
+      if (blob) {
+        const ext = videoExportExtension(page)
+        const baseName = page.name.replace(/\.[^.]+$/, '') || page.name
+        zip.file(`${baseName}${ext}`, blob)
+      }
+      continue
+    }
+
     const dataUrl = await renderPageForExport(page, globalSettings, pages)
     const response = await fetch(dataUrl)
     const blob = await response.blob()

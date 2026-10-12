@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import { renderCollageFromPages } from '../utils/canvasRenderer'
 import { MIN_COLLAGE_PANELS } from '../config/collage'
 import type { CollageRenderOptions } from '../types'
+import { isImageDocumentPage } from '../utils/pageKind'
 
 type CollagePreviewProps = {
   className?: string
@@ -59,7 +60,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
     const renderPreview = async () => {
       try {
         const selectedPages = collageSelectedIds
-          .map((id) => pages.find((page) => page.id === id && !page.isCollage))
+          .map((id) => pages.find((page) => page.id === id && isImageDocumentPage(page)))
           .filter((page): page is NonNullable<typeof page> => Boolean(page))
 
         if (selectedPages.length < MIN_COLLAGE_PANELS) {

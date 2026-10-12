@@ -5,6 +5,7 @@ import {
   downloadSelectedPagesAsPngs,
   downloadSelectedPagesAsZip,
 } from '../utils/export'
+import { isVideoPage } from '../utils/pageKind'
 import { BackgroundControls } from './BackgroundControls'
 import { ExportPagePreview } from './ExportPagePreview'
 
@@ -173,7 +174,7 @@ export function ExportPanel() {
                   <div>
                     <h3 className="font-medium">{page.name}</h3>
                     <p className="text-xs text-zinc-500">
-                      {page.isCollage ? 'Collage' : 'Page'}
+                      {page.isCollage ? 'Collage' : isVideoPage(page) ? 'Video' : 'Page'}
                     </p>
                   </div>
                 )}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { isImageDocumentPage } from '../utils/pageKind'
 import { CollagePreview } from './CollagePreview'
 import {
   MAX_COLLAGE_IMAGE_SCALE,
@@ -10,7 +11,7 @@ import {
 
 export function CollageBuilder() {
   const allPages = useAppStore((state) => state.pages)
-  const pages = useMemo(() => allPages.filter((page) => !page.isCollage), [allPages])
+  const pages = useMemo(() => allPages.filter(isImageDocumentPage), [allPages])
   const collageCount = useMemo(
     () => allPages.filter((page) => page.isCollage).length,
     [allPages],

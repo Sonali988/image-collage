@@ -2,7 +2,7 @@ import type { StateStorage } from 'zustand/middleware'
 
 const DB_NAME = 'image-collage-app-db'
 const STORE_NAME = 'zustand'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -13,6 +13,9 @@ function openDatabase(): Promise<IDBDatabase> {
       const db = request.result
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME)
+      }
+      if (!db.objectStoreNames.contains('videos')) {
+        db.createObjectStore('videos')
       }
     }
   })

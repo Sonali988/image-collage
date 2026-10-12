@@ -17,6 +17,13 @@ import { detectGreenMarkers } from '../utils/markerDetector'
 import { createId, extractOverlayPatch, loadImage, readFileAsDataUrl, rotateImageDataUrl } from '../utils/imageLoader'
 import { placePastedOverlayInVisibleArea, renderCollageFromPages, renderPageToDataUrl } from '../utils/canvasRenderer'
 import { idbStorage } from '../utils/idbStorage'
+import { isVideoPage } from '../utils/pageKind'
+import {
+  createVideoObjectUrl,
+  deleteVideoBlob,
+  saveVideoBlob,
+} from '../utils/videoBlobStorage'
+import { captureVideoPageThumbnail } from '../utils/videoPoster'
 import {
   buildCollageTitles,
   MAX_COLLAGE_PANELS,
@@ -160,11 +167,20 @@ function rotateNormalizedRect(rect: MarkerRect, degrees: 90 | -90 | 180): Marker
 }
 
 function normalizePage(page: Page): Page {
+  const kind = page.kind ?? (page.sourceVideoId ? 'video' : 'image')
   return {
     ...page,
+    kind,
+    videoMuted: page.videoMuted ?? false,
     overlays: page.overlays.map(normalizeOverlay),
     settings: normalizeSettings(page.settings),
     documentScale: clampDocumentScale(page.documentScale),
+  }
+}
+
+function revokeVideoObjectUrl(url: string | null) {
+  if (url?.startsWith('blob:')) {
+    URL.revokeObjectURL(url)
   }
 }
 
@@ -193,6 +209,8 @@ type AppState = {
   setActiveTab: (tab: TabId) => void
   updateSettings: (partial: Partial<AppSettings>) => void
   uploadSourceImage: (file: File) => Promise<void>
+  uploadSourceVideo: (file: File) => Promise<void>
+  setVideoMuted: (muted: boolean) => void
   rotateSourceImage: (degrees: 90 | -90 | 180) => Promise<void>
   uploadBackgroundImage: (file: File) => Promise<void>
   clearBackgroundImage: () => void
@@ -229,8 +247,12 @@ type AppState = {
 }
 
 const initialEditor: EditorState = {
+  sourceKind: null,
   sourceImageDataUrl: null,
   sourceImageName: '',
+  sourceVideoId: null,
+  sourceVideoObjectUrl: null,
+  videoMuted: false,
   activePageId: null,
   overlays: [],
   selectedOverlayId: null,
@@ -307,13 +329,18 @@ export const useAppStore = create<AppState>()(
       uploadSourceImage: async (file) => {
         const dataUrl = await readFileAsDataUrl(file)
         const tintUpdate = getOverlayTintSettingsForUpload(file.name)
+        const previousVideoUrl = get().editor.sourceVideoObjectUrl
 
         set((state) => ({
           settings: { ...state.settings, ...tintUpdate },
           editor: {
             ...state.editor,
+            sourceKind: 'image',
             sourceImageDataUrl: dataUrl,
             sourceImageName: file.name,
+            sourceVideoId: null,
+            sourceVideoObjectUrl: null,
+            videoMuted: false,
             activePageId: null,
             overlays: [],
             selectedOverlayId: null,
@@ -326,6 +353,7 @@ export const useAppStore = create<AppState>()(
             isPatchCropMode: false,
           },
         }))
+        revokeVideoObjectUrl(previousVideoUrl)
 
         try {
           const image = await loadImage(dataUrl)
@@ -353,9 +381,34 @@ export const useAppStore = create<AppState>()(
         }
       },
 
+      uploadSourceVideo: async (file) => {
+        const previousVideoUrl = get().editor.sourceVideoObjectUrl
+        const videoId = await saveVideoBlob(file)
+        const objectUrl = URL.createObjectURL(file)
+        revokeVideoObjectUrl(previousVideoUrl)
+
+        set({
+          editor: {
+            ...initialEditor,
+            sourceKind: 'video',
+            sourceImageDataUrl: null,
+            sourceImageName: file.name,
+            sourceVideoId: videoId,
+            sourceVideoObjectUrl: objectUrl,
+            videoMuted: false,
+            activePageId: null,
+          },
+        })
+      },
+
+      setVideoMuted: (muted) =>
+        set((state) => ({
+          editor: { ...state.editor, videoMuted: muted },
+        })),
+
       rotateSourceImage: async (degrees) => {
         const { editor } = get()
-        if (!editor.sourceImageDataUrl) return
+        if (editor.sourceKind === 'video' || !editor.sourceImageDataUrl) return
 
         set((state) => ({
           editor: {
@@ -757,6 +810,77 @@ export const useAppStore = create<AppState>()(
 
       saveCurrentPage: async (name, options) => {
         const { editor, settings, pages } = get()
+
+        if (editor.sourceKind === 'video' && editor.sourceVideoId && editor.sourceVideoObjectUrl) {
+          const thumbnailDataUrl = await captureVideoPageThumbnail(
+            settings,
+            editor.sourceVideoObjectUrl,
+          )
+
+          const existing =
+            !options?.asNew && editor.activePageId != null
+              ? pages.find(
+                  (page) => page.id === editor.activePageId && !page.isCollage && isVideoPage(page),
+                )
+              : undefined
+
+          const baseName =
+            name ??
+            (editor.sourceImageName.replace(/\.[^.]+$/, '') || `Video ${pages.length + 1}`)
+
+          if (existing) {
+            if (
+              existing.sourceVideoId &&
+              existing.sourceVideoId !== editor.sourceVideoId
+            ) {
+              void deleteVideoBlob(existing.sourceVideoId)
+            }
+
+            const updated: Page = {
+              ...existing,
+              name: name ?? existing.name ?? baseName,
+              kind: 'video',
+              sourceImageDataUrl: '',
+              sourceVideoId: editor.sourceVideoId,
+              videoMuted: editor.videoMuted,
+              overlays: [],
+              settings: { ...settings },
+              thumbnailDataUrl,
+            }
+
+            set((state) => ({
+              pages: state.pages.map((page) =>
+                page.id === existing.id ? updated : page,
+              ),
+              editor: {
+                ...state.editor,
+                sourceImageName: updated.name,
+                activePageId: existing.id,
+              },
+            }))
+            return
+          }
+
+          const page: Page = {
+            id: createId(),
+            name: baseName,
+            kind: 'video',
+            sourceImageDataUrl: '',
+            sourceVideoId: editor.sourceVideoId,
+            videoMuted: editor.videoMuted,
+            overlays: [],
+            settings: { ...settings },
+            thumbnailDataUrl,
+            createdAt: Date.now(),
+          }
+
+          set((state) => ({
+            pages: [page, ...state.pages],
+            editor: { ...state.editor, activePageId: page.id, sourceImageName: page.name },
+          }))
+          return
+        }
+
         if (!editor.sourceImageDataUrl) return
 
         const thumbnailDataUrl = await renderPageToDataUrl(
@@ -829,15 +953,30 @@ export const useAppStore = create<AppState>()(
         }))
       },
 
-      deletePage: (id) =>
-        set((state) => ({
-          pages: state.pages.filter((page) => page.id !== id),
-          collageSelectedIds: state.collageSelectedIds.filter((pageId) => pageId !== id),
-          editor:
-            state.editor.activePageId === id
-              ? { ...state.editor, activePageId: null }
+      deletePage: (id) => {
+        const page = get().pages.find((item) => item.id === id)
+        if (page?.sourceVideoId) {
+          void deleteVideoBlob(page.sourceVideoId)
+        }
+
+        set((state) => {
+          const closingEditor = state.editor.activePageId === id
+          const videoUrl =
+            closingEditor && state.editor.sourceVideoObjectUrl
+              ? state.editor.sourceVideoObjectUrl
+              : null
+
+          if (videoUrl) revokeVideoObjectUrl(videoUrl)
+
+          return {
+            pages: state.pages.filter((page) => page.id !== id),
+            collageSelectedIds: state.collageSelectedIds.filter((pageId) => pageId !== id),
+            editor: closingEditor
+              ? { ...initialEditor }
               : state.editor,
-        })),
+          }
+        })
+      },
 
       renamePage: (id, name) => {
         const trimmed = name.trim()
@@ -848,9 +987,7 @@ export const useAppStore = create<AppState>()(
 
         set((state) => {
           const isActiveDocument =
-            !page.isCollage &&
-            state.editor.sourceImageDataUrl === page.sourceImageDataUrl &&
-            state.editor.sourceImageName === page.name
+            !page.isCollage && state.editor.activePageId === page.id
 
           return {
             pages: state.pages.map((item) =>
@@ -867,19 +1004,56 @@ export const useAppStore = create<AppState>()(
         const page = get().pages.find((item) => item.id === id && !item.isCollage)
         if (!page) return
 
+        const previousVideoUrl = get().editor.sourceVideoObjectUrl
         const { settings: currentSettings } = get()
+        const mergedSettings = withExportCanvasSize({
+          ...page.settings,
+          backgroundColor: currentSettings.backgroundColor,
+          useSolidBackground: currentSettings.useSolidBackground,
+          backgroundImageDataUrl: currentSettings.backgroundImageDataUrl,
+        })
+
+        if (isVideoPage(page) && page.sourceVideoId) {
+          void createVideoObjectUrl(page.sourceVideoId).then((objectUrl) => {
+            if (!objectUrl) return
+            revokeVideoObjectUrl(previousVideoUrl)
+            set({
+              activeTab: 'editor',
+              settings: mergedSettings,
+              editor: {
+                sourceKind: 'video',
+                sourceImageDataUrl: null,
+                sourceImageName: page.name,
+                sourceVideoId: page.sourceVideoId ?? null,
+                sourceVideoObjectUrl: objectUrl,
+                videoMuted: page.videoMuted ?? false,
+                activePageId: page.id,
+                overlays: [],
+                selectedOverlayId: null,
+                documentCropRect: null,
+                documentScale: 1,
+                isDetecting: false,
+                detectionError: null,
+                isCropMode: false,
+                isDocumentCropMode: false,
+                isPatchCropMode: false,
+              },
+            })
+          })
+          return
+        }
+
+        revokeVideoObjectUrl(previousVideoUrl)
         set({
           activeTab: 'editor',
-          settings: withExportCanvasSize({
-            ...page.settings,
-            // Keep current background image / color choices from the session.
-            backgroundColor: currentSettings.backgroundColor,
-            useSolidBackground: currentSettings.useSolidBackground,
-            backgroundImageDataUrl: currentSettings.backgroundImageDataUrl,
-          }),
+          settings: mergedSettings,
           editor: {
+            sourceKind: 'image',
             sourceImageDataUrl: page.sourceImageDataUrl,
             sourceImageName: page.name,
+            sourceVideoId: null,
+            sourceVideoObjectUrl: null,
+            videoMuted: false,
             activePageId: page.id,
             overlays: page.overlays.map(normalizeOverlay),
             selectedOverlayId: null,
@@ -899,7 +1073,9 @@ export const useAppStore = create<AppState>()(
         if (!page?.collagePanelPageIds) return
 
         const panelIds = page.collagePanelPageIds.filter((panelId) =>
-          get().pages.some((item) => item.id === panelId && !item.isCollage),
+          get().pages.some(
+            (item) => item.id === panelId && !item.isCollage && !isVideoPage(item),
+          ),
         )
         if (panelIds.length < MIN_COLLAGE_PANELS) return
 
@@ -923,7 +1099,7 @@ export const useAppStore = create<AppState>()(
       toggleCollageSelection: (id) =>
         set((state) => {
           const page = state.pages.find((item) => item.id === id)
-          if (!page || page.isCollage) return state
+          if (!page || page.isCollage || isVideoPage(page)) return state
 
           const maxSelection = MAX_COLLAGE_PANELS
           const exists = state.collageSelectedIds.includes(id)
@@ -969,7 +1145,9 @@ export const useAppStore = create<AppState>()(
         if (collageSelectedIds.length < MIN_COLLAGE_PANELS) return
 
         const selectedPages = collageSelectedIds
-          .map((id) => pages.find((page) => page.id === id && !page.isCollage))
+          .map((id) =>
+            pages.find((page) => page.id === id && !page.isCollage && !isVideoPage(page)),
+          )
           .filter((page): page is Page => Boolean(page))
 
         if (selectedPages.length < MIN_COLLAGE_PANELS) return
