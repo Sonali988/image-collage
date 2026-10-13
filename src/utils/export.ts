@@ -7,6 +7,9 @@ import {
   renderPageToDataUrl,
 } from './canvasRenderer'
 import { isVideoPage } from './pageKind'
+import { captureVideoPageThumbnail } from './videoPoster'
+import { pauseEditorPreviewVideo } from './editorVideoPlayback'
+import { compositedVideoExportFilename, exportCompositedVideoBlob } from './videoExport'
 import { getVideoBlob } from './videoBlobStorage'
 
 function getReportsZipFilename(date = new Date()): string {
@@ -16,17 +19,41 @@ function getReportsZipFilename(date = new Date()): string {
   return `reports-${year}-${month}-${day}.zip`
 }
 
-function videoExportExtension(page: Page): string {
-  const base = page.name.toLowerCase()
-  if (base.endsWith('.webm')) return '.webm'
-  if (base.endsWith('.mov')) return '.mov'
-  if (base.endsWith('.m4v')) return '.m4v'
-  return '.mp4'
+async function getVideoExportBlob(
+  page: Page,
+  globalSettings: AppSettings,
+): Promise<Blob | null> {
+  const composited = await exportCompositedVideoBlob(page, globalSettings)
+  if (composited) return composited
+  if (!page.sourceVideoId) return null
+  return getVideoBlob(page.sourceVideoId)
+}
+
+async function renderVideoPageForExport(
+  page: Page,
+  globalSettings: AppSettings,
+): Promise<string> {
+  const fallback = page.thumbnailDataUrl
+  const videoId = page.sourceVideoId
+  if (!videoId) return fallback
+
+  const blob = await getVideoBlob(videoId)
+  if (!blob) return fallback
+
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const merged = mergeBackgroundSettings(page.settings, globalSettings)
+    return await captureVideoPageThumbnail(merged, objectUrl)
+  } catch {
+    return fallback
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 export async function renderPageForExport(page: Page, globalSettings: AppSettings, allPages: Page[]) {
   if (isVideoPage(page)) {
-    return page.thumbnailDataUrl
+    return renderVideoPageForExport(page, globalSettings)
   }
 
   if (page.isCollage && page.collagePanelPageIds?.length) {
@@ -63,12 +90,16 @@ export async function downloadPagePng(
   allPages: Page[] = [],
   filename?: string,
 ) {
-  if (isVideoPage(page) && page.sourceVideoId) {
-    const blob = await getVideoBlob(page.sourceVideoId)
+  if (isVideoPage(page)) {
+    pauseEditorPreviewVideo()
+    const blob = await getVideoExportBlob(page, globalSettings)
     if (blob) {
-      const ext = videoExportExtension(page)
-      const baseName = page.name.replace(/\.[^.]+$/, '') || page.name
-      saveAs(blob, filename ?? `${baseName}${ext}`)
+      const name =
+        filename ??
+        (blob.type.includes('webm')
+          ? compositedVideoExportFilename(page.name)
+          : page.name.replace(/\.[^.]+$/, '') + '.mp4')
+      saveAs(blob, name)
       return
     }
   }
@@ -99,15 +130,18 @@ export async function downloadSelectedPagesAsZip(
   const selected = pages.filter((page) => selectedIds.includes(page.id))
   if (selected.length === 0) return
 
+  pauseEditorPreviewVideo()
+
   const zip = new JSZip()
 
   for (const page of selected) {
-    if (isVideoPage(page) && page.sourceVideoId) {
-      const blob = await getVideoBlob(page.sourceVideoId)
+    if (isVideoPage(page)) {
+      const blob = await getVideoExportBlob(page, globalSettings)
       if (blob) {
-        const ext = videoExportExtension(page)
-        const baseName = page.name.replace(/\.[^.]+$/, '') || page.name
-        zip.file(`${baseName}${ext}`, blob)
+        const zipName = blob.type.includes('webm')
+          ? compositedVideoExportFilename(page.name)
+          : page.name.replace(/\.[^.]+$/, '') || 'video'
+        zip.file(zipName, blob)
       }
       continue
     }

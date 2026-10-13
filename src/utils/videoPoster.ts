@@ -15,6 +15,19 @@ function drawPageBackground(
   ctx.fillRect(0, 0, settings.backgroundWidth, settings.backgroundHeight)
 }
 
+export function drawVideoPageFrame(
+  ctx: CanvasRenderingContext2D,
+  settings: AppSettings,
+  bgImage: HTMLImageElement | null,
+  video: HTMLVideoElement,
+) {
+  const vw = video.videoWidth || 640
+  const vh = video.videoHeight || 360
+  drawPageBackground(ctx, settings, bgImage)
+  const placement = getContentPlacement(vw, vh, settings, 1, null)
+  ctx.drawImage(video, placement.drawX, placement.drawY, placement.drawW, placement.drawH)
+}
+
 export function loadVideoElement(src: string): Promise<HTMLVideoElement> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
@@ -43,9 +56,6 @@ export async function captureVideoPageThumbnail(
     window.setTimeout(() => resolve(), 500)
   })
 
-  const vw = video.videoWidth || 640
-  const vh = video.videoHeight || 360
-
   const bgImage = settings.backgroundImageDataUrl
     ? await loadImage(settings.backgroundImageDataUrl)
     : null
@@ -56,11 +66,9 @@ export async function captureVideoPageThumbnail(
   const ctx = canvas.getContext('2d')
   if (!ctx) return ''
 
-  drawPageBackground(ctx, settings, bgImage)
+  drawVideoPageFrame(ctx, settings, bgImage, video)
 
-  const placement = getContentPlacement(vw, vh, settings, 1, null)
-  ctx.drawImage(video, placement.drawX, placement.drawY, placement.drawW, placement.drawH)
-
+  video.pause()
   video.removeAttribute('src')
   video.load()
 

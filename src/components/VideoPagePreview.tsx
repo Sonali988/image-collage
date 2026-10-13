@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppSettings } from '../types'
+import { registerEditorPreviewVideo } from '../utils/editorVideoPlayback'
 import { loadImage } from '../utils/imageLoader'
 import { getVideoContentBox } from '../utils/videoPageLayout'
 
@@ -70,6 +71,11 @@ export function VideoPagePreview({
     const video = videoRef.current
     if (!video) return
     video.muted = muted
+    registerEditorPreviewVideo(video)
+    return () => {
+      video.pause()
+      registerEditorPreviewVideo(null)
+    }
   }, [muted, videoSrc])
 
   if (!videoSrc) {

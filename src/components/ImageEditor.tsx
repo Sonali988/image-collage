@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { mergeBackgroundSettings } from '../utils/canvasRenderer'
 import { MAX_DOCUMENT_SCALE, MIN_DOCUMENT_SCALE } from '../config/defaults'
 import { useAppStore } from '../store/useAppStore'
 import { CanvasPreview } from './CanvasPreview'
@@ -22,6 +23,7 @@ export function ImageEditor() {
   const documentScale = useAppStore((state) => state.editor.documentScale)
   const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const settings = useAppStore((state) => state.settings)
+  const pages = useAppStore((state) => state.pages)
   const updateSettings = useAppStore((state) => state.updateSettings)
   const uploadSourceImage = useAppStore((state) => state.uploadSourceImage)
   const uploadSourceVideo = useAppStore((state) => state.uploadSourceVideo)
@@ -82,6 +84,15 @@ export function ImageEditor() {
 
   const hasDocument = sourceKind === 'video' ? Boolean(sourceVideoObjectUrl) : Boolean(sourceImageDataUrl)
   const isVideo = sourceKind === 'video'
+
+  const videoPreviewSettings = useMemo(() => {
+    if (!isVideo) return settings
+    const activePage = activePageId
+      ? pages.find((page) => page.id === activePageId)
+      : undefined
+    const base = activePage?.settings ?? settings
+    return mergeBackgroundSettings(base, settings)
+  }, [isVideo, activePageId, pages, settings])
 
   const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -292,7 +303,7 @@ export function ImageEditor() {
       <section className="flex min-h-0 flex-col gap-2">
         {isVideo ? (
           <VideoPagePreview
-            settings={settings}
+            settings={videoPreviewSettings}
             videoSrc={sourceVideoObjectUrl ?? ''}
             muted={videoMuted}
             className="min-h-[240px] flex-1"

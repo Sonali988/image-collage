@@ -23,6 +23,7 @@ import {
   deleteVideoBlob,
   saveVideoBlob,
 } from '../utils/videoBlobStorage'
+import { pauseEditorPreviewVideo } from '../utils/editorVideoPlayback'
 import { captureVideoPageThumbnail } from '../utils/videoPoster'
 import {
   buildCollageTitles,
@@ -324,7 +325,10 @@ export const useAppStore = create<AppState>()(
       collageImageScales: [1, 1, 1],
       collageOverlayScales: [1, 1, 1],
 
-      setActiveTab: (tab) => set({ activeTab: tab }),
+      setActiveTab: (tab) => {
+        if (tab !== 'editor') pauseEditorPreviewVideo()
+        set({ activeTab: tab })
+      },
 
       updateSettings: (partial) =>
         set((state) => ({
@@ -400,7 +404,7 @@ export const useAppStore = create<AppState>()(
             sourceImageName: file.name,
             sourceVideoId: videoId,
             sourceVideoObjectUrl: objectUrl,
-            videoMuted: false,
+            videoMuted: true,
             activePageId: null,
           },
         })
@@ -817,6 +821,7 @@ export const useAppStore = create<AppState>()(
         const { editor, settings, pages } = get()
 
         if (editor.sourceKind === 'video' && editor.sourceVideoId && editor.sourceVideoObjectUrl) {
+          pauseEditorPreviewVideo()
           const thumbnailDataUrl = await captureVideoPageThumbnail(
             settings,
             editor.sourceVideoObjectUrl,
