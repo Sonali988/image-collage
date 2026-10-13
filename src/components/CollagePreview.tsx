@@ -3,6 +3,7 @@ import { useAppStore } from '../store/useAppStore'
 import { renderCollageFromPages } from '../utils/canvasRenderer'
 import { MIN_COLLAGE_PANELS } from '../config/collage'
 import type { CollageRenderOptions } from '../types'
+import { isImageDocumentPage } from '../utils/pageKind'
 
 type CollagePreviewProps = {
   className?: string
@@ -15,6 +16,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
   const collageTitles = useAppStore((state) => state.collageTitles)
   const collageShowTitles = useAppStore((state) => state.collageShowTitles)
   const collageImageScales = useAppStore((state) => state.collageImageScales)
+  const collageOverlayScales = useAppStore((state) => state.collageOverlayScales)
   const settings = useAppStore((state) => state.settings)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isRendering, setIsRendering] = useState(false)
@@ -59,7 +61,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
     const renderPreview = async () => {
       try {
         const selectedPages = collageSelectedIds
-          .map((id) => pages.find((page) => page.id === id && !page.isCollage))
+          .map((id) => pages.find((page) => page.id === id && isImageDocumentPage(page)))
           .filter((page): page is NonNullable<typeof page> => Boolean(page))
 
         if (selectedPages.length < MIN_COLLAGE_PANELS) {
@@ -71,6 +73,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
           titles: collageTitles.slice(0, selectedPages.length),
           showTitles: collageShowTitles,
           imageScales: collageImageScales.slice(0, selectedPages.length),
+          overlayScales: collageOverlayScales.slice(0, selectedPages.length),
         }
 
         const collageDataUrl = await renderCollageFromPages(
@@ -98,6 +101,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
     collageTitles,
     collageShowTitles,
     collageImageScales,
+    collageOverlayScales,
     pages,
     settings,
   ])

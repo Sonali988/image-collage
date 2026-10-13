@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { mergeBackgroundSettings } from '../utils/canvasRenderer'
 import { MAX_DOCUMENT_SCALE, MIN_DOCUMENT_SCALE } from '../config/defaults'
 import { useAppStore } from '../store/useAppStore'
 import { CanvasPreview } from './CanvasPreview'
+import { VideoPagePreview } from './VideoPagePreview'
 import { OverlayControls } from './OverlayControls'
 import { OverlayTintPicker } from './OverlayTintPicker'
 import { Panel } from './Panel'
@@ -9,7 +11,11 @@ import { SavedPagesPanel } from './SavedPagesPanel'
 
 export function ImageEditor() {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
+  const sourceKind = useAppStore((state) => state.editor.sourceKind)
   const sourceImageDataUrl = useAppStore((state) => state.editor.sourceImageDataUrl)
+  const sourceVideoObjectUrl = useAppStore((state) => state.editor.sourceVideoObjectUrl)
+  const videoMuted = useAppStore((state) => state.editor.videoMuted)
   const sourceImageName = useAppStore((state) => state.editor.sourceImageName)
   const activePageId = useAppStore((state) => state.editor.activePageId)
   const isDocumentCropMode = useAppStore((state) => state.editor.isDocumentCropMode)
@@ -17,8 +23,11 @@ export function ImageEditor() {
   const documentScale = useAppStore((state) => state.editor.documentScale)
   const isCropMode = useAppStore((state) => state.editor.isCropMode)
   const settings = useAppStore((state) => state.settings)
+  const pages = useAppStore((state) => state.pages)
   const updateSettings = useAppStore((state) => state.updateSettings)
   const uploadSourceImage = useAppStore((state) => state.uploadSourceImage)
+  const uploadSourceVideo = useAppStore((state) => state.uploadSourceVideo)
+  const setVideoMuted = useAppStore((state) => state.setVideoMuted)
   const rotateSourceImage = useAppStore((state) => state.rotateSourceImage)
   const saveCurrentPage = useAppStore((state) => state.saveCurrentPage)
   const setDocumentCropMode = useAppStore((state) => state.setDocumentCropMode)
@@ -73,6 +82,26 @@ export function ImageEditor() {
     setSaveMessage(null)
   }
 
+  const hasDocument = sourceKind === 'video' ? Boolean(sourceVideoObjectUrl) : Boolean(sourceImageDataUrl)
+  const isVideo = sourceKind === 'video'
+
+  const videoPreviewSettings = useMemo(() => {
+    if (!isVideo) return settings
+    const activePage = activePageId
+      ? pages.find((page) => page.id === activePageId)
+      : undefined
+    const base = activePage?.settings ?? settings
+    return mergeBackgroundSettings(base, settings)
+  }, [isVideo, activePageId, pages, settings])
+
+  const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    await uploadSourceVideo(file)
+    event.target.value = ''
+    setSaveMessage(null)
+  }
+
   const handleSave = async () => {
     const updating = Boolean(activePageId)
     await saveCurrentPage()
@@ -100,27 +129,52 @@ export function ImageEditor() {
             onChange={(event) => void handleUpload(event)}
             className="hidden"
           />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={(event) => void handleVideoUpload(event)}
+            className="hidden"
+          />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="flex-1 rounded-md bg-rose-500 px-3 py-2 text-sm font-medium text-white hover:bg-rose-400"
             >
-              Upload
+              Image
             </button>
             <button
               type="button"
-              disabled={!sourceImageDataUrl}
-              onClick={() => void handleSave()}
-              className="flex-1 rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white enabled:hover:bg-emerald-500 disabled:opacity-40"
+              onClick={() => videoInputRef.current?.click()}
+              className="flex-1 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500"
             >
-              {activePageId ? 'Update' : 'Save'}
+              Video
             </button>
           </div>
+          <button
+            type="button"
+            disabled={!hasDocument}
+            onClick={() => void handleSave()}
+            className="mt-2 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white enabled:hover:bg-emerald-500 disabled:opacity-40"
+          >
+            {activePageId ? 'Update' : 'Save'}
+          </button>
           {sourceImageName && (
             <p className="mt-2 truncate text-xs text-zinc-500">{sourceImageName}</p>
           )}
-          {sourceImageDataUrl && (
+          {isVideo && sourceVideoObjectUrl && (
+            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-zinc-300">
+              <input
+                type="checkbox"
+                checked={videoMuted}
+                onChange={(event) => setVideoMuted(event.target.checked)}
+                className="accent-violet-500"
+              />
+              Mute video (playback only)
+            </label>
+          )}
+          {sourceImageDataUrl && !isVideo && (
             <div className="mt-2 space-y-2">
               <div className="flex gap-2">
                 <button
@@ -191,7 +245,7 @@ export function ImageEditor() {
           {saveMessage && <p className="mt-1 text-xs text-emerald-400">{saveMessage}</p>}
         </Panel>
 
-        {sourceImageDataUrl && (
+        {sourceImageDataUrl && !isVideo && (
           <Panel title="Look">
             <OverlayTintPicker compact />
             <label className="mt-3 block text-xs text-zinc-500">
@@ -239,13 +293,24 @@ export function ImageEditor() {
           </Panel>
         )}
 
-        <Panel title="Markers & Crops">
-          <OverlayControls />
-        </Panel>
+        {!isVideo && (
+          <Panel title="Markers & Crops">
+            <OverlayControls />
+          </Panel>
+        )}
       </aside>
 
       <section className="flex min-h-0 flex-col gap-2">
-        <CanvasPreview className="min-h-[240px] flex-1" />
+        {isVideo ? (
+          <VideoPagePreview
+            settings={videoPreviewSettings}
+            videoSrc={sourceVideoObjectUrl ?? ''}
+            muted={videoMuted}
+            className="min-h-[240px] flex-1"
+          />
+        ) : (
+          <CanvasPreview className="min-h-[240px] flex-1" />
+        )}
         <SavedPagesPanel title="Library" variant="strip" />
       </section>
     </div>

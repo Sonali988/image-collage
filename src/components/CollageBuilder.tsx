@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '../store/useAppStore'
+import { isImageDocumentPage } from '../utils/pageKind'
 import { CollagePreview } from './CollagePreview'
 import {
   MAX_COLLAGE_IMAGE_SCALE,
+  MAX_COLLAGE_OVERLAY_SCALE,
   MAX_COLLAGE_PANELS,
   MIN_COLLAGE_IMAGE_SCALE,
+  MIN_COLLAGE_OVERLAY_SCALE,
   MIN_COLLAGE_PANELS,
 } from '../config/collage'
 
 export function CollageBuilder() {
   const allPages = useAppStore((state) => state.pages)
-  const pages = useMemo(() => allPages.filter((page) => !page.isCollage), [allPages])
+  const pages = useMemo(() => allPages.filter(isImageDocumentPage), [allPages])
   const collageCount = useMemo(
     () => allPages.filter((page) => page.isCollage).length,
     [allPages],
@@ -19,10 +22,12 @@ export function CollageBuilder() {
   const collageTitles = useAppStore((state) => state.collageTitles)
   const collageShowTitles = useAppStore((state) => state.collageShowTitles)
   const collageImageScales = useAppStore((state) => state.collageImageScales)
+  const collageOverlayScales = useAppStore((state) => state.collageOverlayScales)
   const toggleCollageSelection = useAppStore((state) => state.toggleCollageSelection)
   const setCollageTitle = useAppStore((state) => state.setCollageTitle)
   const setCollageShowTitles = useAppStore((state) => state.setCollageShowTitles)
   const setCollageImageScale = useAppStore((state) => state.setCollageImageScale)
+  const setCollageOverlayScale = useAppStore((state) => state.setCollageOverlayScale)
   const saveCollage = useAppStore((state) => state.saveCollage)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -125,20 +130,37 @@ export function CollageBuilder() {
               }`}
             >
               {Array.from({ length: selectedCount }).map((_, index) => (
-                <label key={`scale-${index}`} className="block text-xs text-zinc-500">
-                  Panel {index + 1} size · {(collageImageScales[index] ?? 1).toFixed(2)}×
-                  <input
-                    type="range"
-                    min={MIN_COLLAGE_IMAGE_SCALE}
-                    max={MAX_COLLAGE_IMAGE_SCALE}
-                    step={0.05}
-                    value={collageImageScales[index] ?? 1}
-                    onChange={(event) =>
-                      setCollageImageScale(index, Number(event.target.value))
-                    }
-                    className="mt-1 w-full accent-rose-400"
-                  />
-                </label>
+                <div key={`scale-${index}`} className="space-y-2 rounded-md border border-zinc-800/80 bg-zinc-950/40 p-2">
+                  <p className="text-[11px] font-medium text-zinc-400">Panel {index + 1}</p>
+                  <label className="block text-xs text-zinc-500">
+                    Document size · {(collageImageScales[index] ?? 1).toFixed(2)}×
+                    <input
+                      type="range"
+                      min={MIN_COLLAGE_IMAGE_SCALE}
+                      max={MAX_COLLAGE_IMAGE_SCALE}
+                      step={0.05}
+                      value={collageImageScales[index] ?? 1}
+                      onChange={(event) =>
+                        setCollageImageScale(index, Number(event.target.value))
+                      }
+                      className="mt-1 w-full accent-rose-400"
+                    />
+                  </label>
+                  <label className="block text-xs text-zinc-500">
+                    Crop zone size · {(collageOverlayScales[index] ?? 1).toFixed(2)}×
+                    <input
+                      type="range"
+                      min={MIN_COLLAGE_OVERLAY_SCALE}
+                      max={MAX_COLLAGE_OVERLAY_SCALE}
+                      step={0.05}
+                      value={collageOverlayScales[index] ?? 1}
+                      onChange={(event) =>
+                        setCollageOverlayScale(index, Number(event.target.value))
+                      }
+                      className="mt-1 w-full accent-violet-400"
+                    />
+                  </label>
+                </div>
               ))}
             </div>
           </section>

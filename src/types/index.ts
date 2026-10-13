@@ -96,10 +96,17 @@ export type RenderPageOptions = {
   documentScale?: number
 }
 
+export type PageKind = 'image' | 'video'
+
 export type Page = {
   id: string
   name: string
+  kind?: PageKind
   sourceImageDataUrl: string
+  /** IndexedDB blob id for video pages. */
+  sourceVideoId?: string | null
+  /** Playback-only mute (does not alter the file). */
+  videoMuted?: boolean
   overlays: MagnifierOverlay[]
   settings: AppSettings
   thumbnailDataUrl: string
@@ -117,14 +124,24 @@ export type CollageLayout = 'horizontal-2'
 export type CollageRenderOptions = {
   titles: string[]
   showTitles?: boolean
+  /** Scales the document layer inside each panel. */
   imageScales?: number[]
+  /** Scales crop/marker overlays only (collage layout). */
+  overlayScales?: number[]
   skipBackground?: boolean
   showPlaceholderBackground?: boolean
 }
 
+export type EditorSourceKind = 'image' | 'video' | null
+
 export type EditorState = {
+  sourceKind: EditorSourceKind
   sourceImageDataUrl: string | null
   sourceImageName: string
+  sourceVideoId: string | null
+  /** Object URL for the current video session (not persisted). */
+  sourceVideoObjectUrl: string | null
+  videoMuted: boolean
   /** When set, Save updates this page instead of creating a new one. */
   activePageId: string | null
   overlays: MagnifierOverlay[]

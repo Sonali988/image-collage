@@ -625,7 +625,7 @@ export async function renderCollageToDataUrl(
     const slotY = slot.y * canvas.height
     const slotW = slot.w * canvas.width
     const slotH = slot.h * canvas.height
-    const imageScale = options.imageScales?.[index] ?? 1
+    const overlayScale = options.overlayScales?.[index] ?? 1
 
     drawCollageSlotImage(
       ctx,
@@ -636,7 +636,7 @@ export async function renderCollageToDataUrl(
       slotH,
       titleHeight,
       slotPadding,
-      imageScale,
+      overlayScale,
       false,
     )
   })
