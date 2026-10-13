@@ -206,6 +206,7 @@ type AppState = {
   collageTitles: string[]
   collageShowTitles: boolean
   collageImageScales: number[]
+  collageOverlayScales: number[]
   setActiveTab: (tab: TabId) => void
   updateSettings: (partial: Partial<AppSettings>) => void
   uploadSourceImage: (file: File) => Promise<void>
@@ -243,6 +244,7 @@ type AppState = {
   setCollageTitle: (index: number, title: string) => void
   setCollageShowTitles: (show: boolean) => void
   setCollageImageScale: (index: number, scale: number) => void
+  setCollageOverlayScale: (index: number, scale: number) => void
   saveCollage: (name?: string) => Promise<void>
 }
 
@@ -297,11 +299,13 @@ function getCollageRenderOptions(
   imageCount: number,
   collageShowTitles: boolean,
   collageImageScales: number[],
+  collageOverlayScales: number[],
 ): CollageRenderOptions {
   return {
     titles: collageTitles.slice(0, imageCount),
     showTitles: collageShowTitles,
     imageScales: collageImageScales.slice(0, imageCount),
+    overlayScales: collageOverlayScales.slice(0, imageCount),
   }
 }
 
@@ -318,6 +322,7 @@ export const useAppStore = create<AppState>()(
       collageTitles: ['BEFORE', 'AFTER', ''],
       collageShowTitles: true,
       collageImageScales: [1, 1, 1],
+      collageOverlayScales: [1, 1, 1],
 
       setActiveTab: (tab) => set({ activeTab: tab }),
 
@@ -1082,6 +1087,7 @@ export const useAppStore = create<AppState>()(
         const options = page.collageRenderOptions ?? { titles: [] }
         const titles = options.titles ?? []
         const imageScales = options.imageScales ?? [1, 1, 1]
+        const overlayScales = options.overlayScales ?? [1, 1, 1]
 
         set({
           activeTab: 'collage',
@@ -1092,6 +1098,11 @@ export const useAppStore = create<AppState>()(
             imageScales[0] ?? 1,
             imageScales[1] ?? 1,
             imageScales[2] ?? 1,
+          ],
+          collageOverlayScales: [
+            overlayScales[0] ?? 1,
+            overlayScales[1] ?? 1,
+            overlayScales[2] ?? 1,
           ],
         })
       },
@@ -1133,12 +1144,20 @@ export const useAppStore = create<AppState>()(
           return { collageImageScales }
         }),
 
+      setCollageOverlayScale: (index, scale) =>
+        set((state) => {
+          const collageOverlayScales = [...state.collageOverlayScales]
+          collageOverlayScales[index] = scale
+          return { collageOverlayScales }
+        }),
+
       saveCollage: async (name) => {
         const {
           collageSelectedIds,
           collageTitles,
           collageShowTitles,
           collageImageScales,
+          collageOverlayScales,
           pages,
           settings,
         } = get()
@@ -1158,6 +1177,7 @@ export const useAppStore = create<AppState>()(
             selectedPages.length,
             collageShowTitles,
             collageImageScales,
+            collageOverlayScales,
           )
 
           const previewDataUrl = await renderCollageFromPages(selectedPages, settings, {

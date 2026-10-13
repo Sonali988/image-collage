@@ -124,7 +124,10 @@ export type CollageLayout = 'horizontal-2'
 export type CollageRenderOptions = {
   titles: string[]
   showTitles?: boolean
+  /** Scales the document layer inside each panel. */
   imageScales?: number[]
+  /** Scales crop/marker overlays only (collage layout). */
+  overlayScales?: number[]
   skipBackground?: boolean
   showPlaceholderBackground?: boolean
 }

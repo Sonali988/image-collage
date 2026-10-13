@@ -16,6 +16,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
   const collageTitles = useAppStore((state) => state.collageTitles)
   const collageShowTitles = useAppStore((state) => state.collageShowTitles)
   const collageImageScales = useAppStore((state) => state.collageImageScales)
+  const collageOverlayScales = useAppStore((state) => state.collageOverlayScales)
   const settings = useAppStore((state) => state.settings)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isRendering, setIsRendering] = useState(false)
@@ -72,6 +73,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
           titles: collageTitles.slice(0, selectedPages.length),
           showTitles: collageShowTitles,
           imageScales: collageImageScales.slice(0, selectedPages.length),
+          overlayScales: collageOverlayScales.slice(0, selectedPages.length),
         }
 
         const collageDataUrl = await renderCollageFromPages(
@@ -99,6 +101,7 @@ export function CollagePreview({ className = '' }: CollagePreviewProps) {
     collageTitles,
     collageShowTitles,
     collageImageScales,
+    collageOverlayScales,
     pages,
     settings,
   ])
